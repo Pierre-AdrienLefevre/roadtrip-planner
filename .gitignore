@@ -8,12 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
-.idea
-
-__pycache__
+.idea/
 
 debug.py
 
 data
-
-Create CSV.py
+cache
