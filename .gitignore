@@ -9,10 +9,15 @@ wheels/
 # Virtual environments
 .venv
 .idea/
-
+/.idea/
 debug.py
 
-data
+data/hebergements.csv
+data/hebergements_avec_coords_open.csv
+data/hebergements_chemins.parquet
+data/Planification budget.xlsx
+data/hebergements_chemins.parquet copie
+
 cache
 .streamlit
 
