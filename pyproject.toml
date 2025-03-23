@@ -1,18 +1,16 @@
 [project]
 name = "road-trip"
 version = "0.1.0"
-description = "Add your description here"
+description = "Road Trip Planner"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = "~=3.13"
 dependencies = [
-    "folium>=0.19.5",
-    "geopy>=2.4.1",
-    "opencage>=3.0.4",
-    "openpyxl>=3.1.5",
-    "osmnx>=2.0.1",
-    "pandas>=2.2.3",
-    "plotly>=6.0.0",
-    "polyline>=2.0.2",
-    "streamlit>=1.43.2",
-    "streamlit-folium>=0.24.0",
+    "folium~=0.19.5",
+    "geopy~=2.4.1",
+    "opencage~=3.0.4",
+    "osmnx~=2.0.1",
+    "pandas~=2.2.3",
+    "polyline~=2.0.2",
+    "streamlit~=1.43.2",
+    "streamlit-folium~=0.24.0",
 ]

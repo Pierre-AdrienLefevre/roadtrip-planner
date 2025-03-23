@@ -10,7 +10,7 @@ uploaded_file = 'data/hebergements_chemins.parquet'
 df = pd.read_parquet(uploaded_file)
 
 # Définir les colonnes à cacher
-colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type', 'Adresse']
+colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type']
 df_visible = df.drop(columns=colonnes_cachees, errors="ignore")
 
 # Édition interactive du tableau
@@ -33,24 +33,26 @@ if st.sidebar.button("🔄 Appliquer les modifications"):
     if not modifications.empty:
         indices_modifiés = modifications.index.tolist()
 
-        # Ajouter la ligne précédente et suivante à recalculer
+        # Ne recalculer que la ligne modifiée et la ligne immédiatement après
         indices_a_recalculer = set()
         for idx in indices_modifiés:
             indices_a_recalculer.add(idx)
-            if idx > 0:
-                indices_a_recalculer.add(idx - 1)
             if idx < len(df) - 1:
                 indices_a_recalculer.add(idx + 1)
 
         # Convertir en liste triée
         indices_a_recalculer = sorted(indices_a_recalculer)
 
-        # Afficher un message d'attente
-        with st.spinner(f"Recalcul des distances pour les lignes {indices_a_recalculer}..."):
-            _, _, df = calculate_routes_osrm(df.iloc[indices_a_recalculer])
+        # Créer un sous-DataFrame avec uniquement les lignes à recalculer
+        df_subset = df.loc[indices_a_recalculer].copy()
 
-            # Mettre à jour uniquement les lignes concernées
-            df.iloc[indices_a_recalculer].to_parquet(uploaded_file, index=False)
+        with st.spinner(f"Recalcul des distances pour les lignes {indices_a_recalculer}..."):
+            # Recalculer les routes pour le sous-DataFrame
+            _, _, df_recalc = calculate_routes_osrm(df_subset)
+
+            # Mettre à jour uniquement les lignes concernées dans le DataFrame original
+            df.update(df_recalc)
+            df.to_parquet(uploaded_file, index=False)
 
         st.success("✅ Modifications appliquées et distances recalculées !")
     else:
