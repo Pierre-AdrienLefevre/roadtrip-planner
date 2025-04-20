@@ -1,6 +1,6 @@
 [project]
 name = "road-trip"
-version = "1.0"
+version = "1.1"
 description = "Road Trip Planner"
 readme = "README.md"
 requires-python = "~=3.12"
