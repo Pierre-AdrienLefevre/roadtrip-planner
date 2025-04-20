@@ -152,7 +152,9 @@ def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des d
         st.error(traceback.format_exc())
         return False
 
+
 def add_lat_lon(df, address_column="Adresse"):
+    """Ajoute les coordonnées géographiques (latitude, longitude) pour chaque adresse"""
     try:
         api_key = st.secrets["opencage"]["api_key"]
     except KeyError:
@@ -185,6 +187,7 @@ def add_lat_lon(df, address_column="Adresse"):
     st.info("✅ Latitude et Longitude ajoutées avec succès !")
     return df
 
+
 def get_osrm_route(lat1, lon1, lat2, lon2):
     """Interroge OSRM pour obtenir le tracé et la distance entre deux points."""
     # Vérifier que les coordonnées sont valides
@@ -206,7 +209,6 @@ def get_osrm_route(lat1, lon1, lat2, lon2):
             route_coords = polyline.decode(route["geometry"])  # Liste de (lat, lon)
             return distance_km, json.dumps(route_coords)  # Sauvegarde en JSON
     return None, None
-
 
 
 def calculate_routes_osrm(df):
@@ -284,3 +286,53 @@ def calculate_routes_osrm(df):
     route_geoms.append(json.dumps([]))
 
     return distances, route_geoms, df
+
+
+def identifier_sejours_multiples(df):
+    """Identifie les séjours multiples au même endroit et met à jour les durées"""
+    # Créer une copie pour éviter de modifier le DataFrame original
+    df_avec_duree = df.copy()
+
+    # Initialiser les colonnes pour la durée du séjour et la date de fin
+    df_avec_duree['Duree_Sejour'] = 1
+    df_avec_duree['Date_Fin'] = None
+
+    # Première passe pour identifier les groupes de séjour
+    groupes_sejour = []
+    groupe_actuel = [0]  # Commencer avec la première ligne
+
+    for i in range(1, len(df_avec_duree)):
+        # Comparer avec le dernier élément du groupe actuel
+        dernier_index = groupe_actuel[-1]
+
+        # Vérifier si l'adresse actuelle est la même que celle du dernier élément du groupe
+        meme_adresse = df_avec_duree.iloc[dernier_index]['Adresse'] == df_avec_duree.iloc[i]['Adresse']
+        memes_coords = (df_avec_duree.iloc[dernier_index]['Latitude'] == df_avec_duree.iloc[i]['Latitude'] and
+                        df_avec_duree.iloc[dernier_index]['Longitude'] == df_avec_duree.iloc[i]['Longitude'])
+
+        if meme_adresse or memes_coords:
+            # Même endroit, ajouter à ce groupe
+            groupe_actuel.append(i)
+        else:
+            # Nouvel endroit, terminer le groupe actuel et en commencer un nouveau
+            groupes_sejour.append(groupe_actuel)
+            groupe_actuel = [i]
+
+    # Ajouter le dernier groupe
+    groupes_sejour.append(groupe_actuel)
+
+    # Deuxième passe pour mettre à jour les durées et dates
+    for groupe in groupes_sejour:
+        if len(groupe) > 1:  # Séjour multiple
+            premier_index = groupe[0]
+            dernier_index = groupe[-1]
+
+            # Mettre à jour le premier élément du groupe
+            df_avec_duree.at[premier_index, 'Duree_Sejour'] = len(groupe)
+            df_avec_duree.at[premier_index, 'Date_Fin'] = df_avec_duree.iloc[dernier_index]['Nuit']
+
+            # Marquer les autres éléments du groupe comme à fusionner
+            for i in groupe[1:]:
+                df_avec_duree.at[i, 'Duree_Sejour'] = -1
+
+    return df_avec_duree
