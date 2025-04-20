@@ -12,13 +12,8 @@ wheels/
 /.idea/
 debug.py
 
-data/hebergements.csv
-data/hebergements_avec_coords_open.csv
-data/hebergements_chemins.parquet
-data/Planification budget.xlsx
-data/hebergements_chemins.parquet copie
+hebergements_chemins.parquet copie
+Planification budget.xlsx
 
 cache
 .streamlit
-
-uv.lock

@@ -9,7 +9,7 @@ from core import calculate_routes_osrm
 st.set_page_config(layout="wide")
 st.title("🗺️ Carte interactive du Roadtrip 🚗")
 
-# Charger le fichier CSV
+# Charger le fichier parquet
 uploaded_file = 'data/hebergements_chemins.parquet'
 df = pd.read_parquet(uploaded_file)
 

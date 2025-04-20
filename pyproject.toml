@@ -5,12 +5,11 @@ description = "Road Trip Planner"
 readme = "README.md"
 requires-python = "~=3.13"
 dependencies = [
-    "folium~=0.19.5",
-    "geopy~=2.4.1",
-    "opencage~=3.0.4",
-    "osmnx~=2.0.1",
-    "pandas~=2.2.3",
-    "polyline~=2.0.2",
-    "streamlit~=1.43.2",
-    "streamlit-folium~=0.24.0",
+    "folium~=0.19",
+    "opencage~=3.0",
+    "pandas~=2.2",
+    "polyline~=2.0",
+    "requests~=2.32",
+    "streamlit~=1.44",
+    "streamlit-folium~=0.24",
 ]

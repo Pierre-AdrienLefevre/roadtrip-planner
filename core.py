@@ -60,40 +60,75 @@ def get_osrm_route(lat1, lon1, lat2, lon2):
             return distance_km, json.dumps(route_coords)  # Sauvegarde en JSON
     return None, None
 
+
 @st.cache_data
 def calculate_routes_osrm(df):
     """Calcule les distances et les trajets avec OSRM si non enregistrés."""
+    # Créer une copie du DataFrame pour éviter de modifier l'original
+    df = df.copy()
+
     # S'assurer que les colonnes nécessaires existent
     for col in ["Latitude", "Longitude"]:
         if col not in df.columns:
-            # Si manquantes, on ajoute les coordonnées via OpenCage
-            df = add_lat_lon(df)
-            break
+            df[col] = None
 
     if "Chemin" not in df.columns:
         df["Chemin"] = None
     if "Distance (km)" not in df.columns:
         df["Distance (km)"] = None
 
+    # Vérifier s'il y a des coordonnées manquantes et les ajouter
+    missing_coords = df[df["Latitude"].isna() | df["Longitude"].isna()].index
+    if len(missing_coords) > 0:
+        # Appliquer add_lat_lon seulement aux lignes avec coordonnées manquantes
+        df_missing = df.loc[missing_coords].copy()
+        df_missing = add_lat_lon(df_missing)
+
+        # Mettre à jour le DataFrame original avec les nouvelles coordonnées
+        for idx in missing_coords:
+            df.loc[idx, "Latitude"] = df_missing.loc[idx, "Latitude"]
+            df.loc[idx, "Longitude"] = df_missing.loc[idx, "Longitude"]
+
+    # Initialiser les listes pour stocker les résultats
     distances = []
     route_geoms = []
 
+    # Calculer les itinéraires pour chaque segment
     for i in range(len(df) - 1):  # On parcourt jusqu'à l'avant-dernier point
         lat1, lon1 = df.iloc[i]["Latitude"], df.iloc[i]["Longitude"]
         lat2, lon2 = df.iloc[i + 1]["Latitude"], df.iloc[i + 1]["Longitude"]
 
-        # Si le tracé a déjà été calculé et enregistré, on le récupère
-        if pd.notna(df.iloc[i]["Chemin"]) and pd.notna(df.iloc[i]["Distance (km)"]):
-            try:
-                route_coords = json.loads(df.iloc[i]["Chemin"])
-            except Exception:
-                route_coords = []
-            distance = df.iloc[i]["Distance (km)"]
-        else:
-            distance, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
-            df.at[i, "Distance (km)"] = distance  # Mise à jour dans le DataFrame
-            df.at[i, "Chemin"] = route_coords if route_coords else json.dumps([])  # Sauvegarde
+        # Vérifier si toutes les coordonnées sont valides
+        valid_coords = pd.notna(lat1) and pd.notna(lon1) and pd.notna(lat2) and pd.notna(lon2)
 
+        # Si les coordonnées sont valides et le tracé est déjà calculé, on le récupère
+        if valid_coords and pd.notna(df.iloc[i]["Chemin"]) and pd.notna(df.iloc[i]["Distance (km)"]):
+            try:
+                route_coords = df.iloc[i]["Chemin"]
+                if isinstance(route_coords, str):
+                    route_coords = json.loads(route_coords)
+                distance = df.iloc[i]["Distance (km)"]
+            except Exception as e:
+                st.warning(f"Erreur lors de la lecture du chemin à l'index {i}: {e}")
+                distance, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
+        # Sinon, on calcule un nouveau tracé si les coordonnées sont valides
+        elif valid_coords:
+            distance, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
+        # Si les coordonnées sont invalides, on ne peut pas calculer de tracé
+        else:
+            st.warning(f"Coordonnées manquantes pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire.")
+            distance = None
+            route_coords = json.dumps([])
+
+        # Mettre à jour le DataFrame directement
+        df.at[i, "Distance (km)"] = distance
+
+        # S'assurer que route_coords est au format JSON
+        if isinstance(route_coords, list):
+            route_coords = json.dumps(route_coords)
+        df.at[i, "Chemin"] = route_coords
+
+        # Stocker pour retour de fonction
         distances.append(distance)
         route_geoms.append(route_coords)
 
@@ -101,11 +136,7 @@ def calculate_routes_osrm(df):
     distances.append(None)
     route_geoms.append(json.dumps([]))
 
-    df["Distance (km)"] = distances
-    df["Chemin"] = route_geoms
-
-    # S'assurer que la colonne "Chemin" est au format JSON
-    df["Chemin"] = df["Chemin"].apply(lambda x: json.dumps(x) if isinstance(x, list) else x)
+    # Sauvegarder le DataFrame
     df.to_parquet('data/hebergements_chemins.parquet')
 
     return distances, route_geoms, df
