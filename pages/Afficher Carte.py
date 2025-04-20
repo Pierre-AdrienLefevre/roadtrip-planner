@@ -3,7 +3,7 @@ import pandas as pd
 import folium
 import json
 from streamlit_folium import st_folium
-from core import calculate_routes_osrm
+from core import calculate_routes_osrm,charger_donnees
 
 
 st.set_page_config(layout="wide")
@@ -11,7 +11,7 @@ st.title("🗺️ Carte interactive du Roadtrip 🚗")
 
 # Charger le fichier parquet
 uploaded_file = 'data/hebergements_chemins.parquet'
-df = pd.read_parquet(uploaded_file)
+df = charger_donnees(nom_fichier=uploaded_file, format="parquet")
 
 
 # Calculer les distances et les trajets

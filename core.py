@@ -1,9 +1,157 @@
-import pandas as pd
-import streamlit as st
-import json
 from opencage.geocoder import OpenCageGeocode
 import polyline
 import requests
+import streamlit as st
+import pandas as pd
+import json
+import base64
+import os
+from github import Github
+from io import BytesIO
+
+
+@st.cache_data
+def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"):
+    """
+    Fonction pour charger des données depuis un dépôt GitHub privé.
+
+    Args:
+        nom_fichier: Chemin du fichier relatif à la racine du dépôt
+        format: Format de conversion souhaité
+        branche: Nom de la branche (par défaut: "main")
+    """
+    try:
+        # Récupérer les identifiants depuis les secrets Streamlit
+        token = st.secrets["github"]["token"]
+        repo_name = st.secrets["github"]["repo_name"]
+
+        # Initialiser le client GitHub
+        g = Github(token)
+        repo = g.get_repo(repo_name)
+
+        try:
+            # Récupérer le contenu du fichier à partir de la branche spécifiée
+            contents = repo.get_contents(nom_fichier, ref=branche)
+
+            # Décoder le contenu du fichier
+            decoded_content = base64.b64decode(contents.content)
+
+            # Créer un objet BytesIO pour lire le contenu
+            buffer = BytesIO(decoded_content)
+
+            # Convertir selon le format demandé
+            if format == 'parquet':
+                return pd.read_parquet(buffer)
+            elif format == 'csv':
+                return pd.read_csv(buffer)
+            elif format == 'json':
+                return json.loads(decoded_content)
+            elif format == 'txt' or format == 'text':
+                return decoded_content.decode('utf-8')
+            else:
+                buffer.seek(0)
+                return buffer
+
+        except Exception as e:
+            st.warning(f"Erreur lors de l'accès au fichier {nom_fichier} sur la branche {branche}: {e}")
+            return None
+
+    except Exception as e:
+        st.error(f"Erreur lors de l'accès au dépôt GitHub: {e}")
+        return None
+
+
+def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des données", branche="main"):
+    """
+    Fonction pour sauvegarder des données dans un dépôt GitHub privé sans créer de copie locale.
+
+    Args:
+        contenu: Contenu à sauvegarder (DataFrame, dict, str, bytes, ou BytesIO)
+        nom_fichier: Nom du fichier à sauvegarder
+        message_commit: Message pour le commit GitHub
+        branche: Nom de la branche (par défaut: "main")
+
+    Returns:
+        bool: True si la sauvegarde a réussi, False sinon
+    """
+    try:
+        # Récupérer les identifiants depuis les secrets Streamlit
+        token = st.secrets["github"]["token"]
+        repo_name = st.secrets["github"]["repo_name"]
+
+        # Convertir le contenu en bytes selon son type
+        if isinstance(contenu, pd.DataFrame):
+            # Pour un DataFrame pandas
+            buffer = BytesIO()
+            if nom_fichier.endswith('.parquet'):
+                contenu.to_parquet(buffer, index=False)
+            elif nom_fichier.endswith('.csv'):
+                contenu.to_csv(buffer, index=False)
+            else:
+                contenu.to_csv(buffer, index=False)  # CSV par défaut
+            buffer.seek(0)
+            github_content = buffer.read()
+
+        elif isinstance(contenu, dict) or isinstance(contenu, list):
+            # Pour un dictionnaire ou une liste (format JSON)
+            github_content = json.dumps(contenu).encode('utf-8')
+
+        elif isinstance(contenu, str):
+            # Pour une chaîne de caractères
+            github_content = contenu.encode('utf-8')
+
+        elif isinstance(contenu, bytes):
+            # Pour des données binaires
+            github_content = contenu
+
+        elif isinstance(contenu, BytesIO):
+            # Pour un BytesIO
+            contenu.seek(0)
+            github_content = contenu.read()
+
+        else:
+            st.error(f"Type de contenu non pris en charge: {type(contenu)}")
+            return False
+
+        # Initialiser le client GitHub
+        g = Github(token)
+        repo = g.get_repo(repo_name)
+
+        try:
+            # Vérifier si le fichier existe déjà
+            contents = repo.get_contents(nom_fichier, ref=branche)
+            # Mettre à jour le fichier existant
+            repo.update_file(
+                path=contents.path,
+                message=message_commit,
+                content=github_content,
+                sha=contents.sha,
+                branch=branche
+            )
+        except GithubException as e:
+            if e.status == 404:
+                # Si le fichier n'existe pas, le créer
+                repo.create_file(
+                    path=nom_fichier,
+                    message=message_commit,
+                    content=github_content,
+                    branch=branche
+                )
+            else:
+                raise e
+
+        # Invalider le cache pour forcer un rechargement des données
+        if 'charger_donnees' in globals() and hasattr(charger_donnees, 'clear'):
+            charger_donnees.clear()
+
+        st.success(f"✅ Fichier {nom_fichier} sauvegardé sur GitHub")
+        return True
+
+    except Exception as e:
+        st.error(f"Erreur lors de la sauvegarde sur GitHub: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return False
 
 def add_lat_lon(df, address_column="Adresse"):
     try:
@@ -61,7 +209,7 @@ def get_osrm_route(lat1, lon1, lat2, lon2):
     return None, None
 
 
-@st.cache_data
+
 def calculate_routes_osrm(df):
     """Calcule les distances et les trajets avec OSRM si non enregistrés."""
     # Créer une copie du DataFrame pour éviter de modifier l'original

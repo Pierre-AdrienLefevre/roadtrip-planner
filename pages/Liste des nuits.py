@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
 import json
-from core import calculate_routes_osrm
+from core import calculate_routes_osrm, charger_donnees, sauvegarder_donnees
 
 st.set_page_config(layout="wide")
 
 # Charger le fichier Parquet existant
 uploaded_file = 'data/hebergements_chemins.parquet'
-df = pd.read_parquet(uploaded_file)
+df = charger_donnees(nom_fichier=uploaded_file, format="parquet")
 
 # Définir les colonnes à cacher
 colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type']
@@ -76,7 +76,7 @@ if st.sidebar.button("🔄 Appliquer les modifications"):
             df = df_updated
 
             # Sauvegarder le DataFrame mis à jour
-            df.to_parquet(uploaded_file, index=False)
+            sauvegarder_donnees(df, nom_fichier=uploaded_file)
 
         # Calculer la distance totale mise à jour
         distance_totale_maj = df["Distance (km)"].sum(skipna=True)
