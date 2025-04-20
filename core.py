@@ -5,8 +5,7 @@ import streamlit as st
 import pandas as pd
 import json
 import base64
-import os
-from github import Github
+from github import Github, GithubException
 from io import BytesIO
 
 
@@ -283,8 +282,5 @@ def calculate_routes_osrm(df):
     # Ajouter une dernière valeur pour correspondre à la taille du DataFrame
     distances.append(None)
     route_geoms.append(json.dumps([]))
-
-    # Sauvegarder le DataFrame
-    df.to_parquet('data/hebergements_chemins.parquet')
 
     return distances, route_geoms, df

@@ -881,7 +881,7 @@ requires-dist = [
     { name = "opencage", specifier = "~=3.1" },
     { name = "pandas", specifier = "~=2.2" },
     { name = "polyline", specifier = "~=2.0" },
-    { name = "pygithub", specifier = ">=2.6.1" },
+    { name = "pygithub", specifier = "~=2.6" },
     { name = "requests", specifier = "~=2.32" },
     { name = "streamlit", specifier = "~=1.44" },
     { name = "streamlit-folium", specifier = "~=0.24" },
