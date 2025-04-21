@@ -37,7 +37,8 @@ def creer_icones():
         "etape": folium.Icon(color="blue", icon="bed", prefix="fa"),
         "depart": folium.Icon(color="red", icon="play", prefix="fa"),
         "arrivee": folium.Icon(color="green", icon="flag-checkered", prefix="fa"),
-        "sejour": folium.Icon(color="purple", icon="home", prefix="fa")
+        "sejour": folium.Icon(color="purple", icon="home", prefix="fa"),
+        "camping": folium.Icon(color="orange", icon="campground", prefix="fa")  # Ajout de l'icône camping
     }
 
     return icons
@@ -48,15 +49,29 @@ def creer_carte(df, df_avec_duree, distances=None):
     start_lat = df.iloc[0]["Latitude"]
     start_lon = df.iloc[0]["Longitude"]
 
-    # Créer une carte avec un thème moderne
+    # Créer une carte sans tuile de base pour pouvoir alterner entre les vues
     m = folium.Map(
         location=[start_lat, start_lon],
         zoom_start=6,
-        tiles="CartoDB positron",
-        attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        tiles=None,
         width="100%",
         height="100%"
     )
+
+    # Ajouter la couche satellite
+    folium.TileLayer(
+        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        name="Satellite",
+        attr='Esri',
+    ).add_to(m)
+
+
+    # Ajouter la couche de carte normale
+    folium.TileLayer(
+        tiles="CartoDB positron",
+        name="Carte",
+        attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    ).add_to(m)
 
     # Ajouter les tracés des routes entre chaque point
     for i in range(len(df) - 1):
@@ -88,7 +103,8 @@ def creer_carte(df, df_avec_duree, distances=None):
         "départ": "#DC143C",  # Rouge
         "arrivée": "#228B22",  # Vert
         "séjour": "#800080",  # Violet
-        "étape": "#1E90FF"  # Bleu
+        "étape": "#1E90FF",  # Bleu
+        "camping": "#FF8C00"  # Orange pour le camping
     }
 
     # Parcourir le DataFrame traité pour afficher les marqueurs
@@ -106,14 +122,29 @@ def creer_carte(df, df_avec_duree, distances=None):
             point_type = "arrivée"
             icon = icons["arrivee"]
             title = "Point d'arrivée"
-        elif row["Duree_Sejour"] > 1:
-            point_type = "séjour"
-            icon = icons["sejour"]
-            title = f"Séjour de {row['Duree_Sejour']} nuits"
+        elif type_heb_lower := (row["Type"].lower() if "Type" in row and pd.notna(row["Type"]) else ""):
+            # Vérifier si c'est un camping
+            if "camping" in type_heb_lower or "camp" in type_heb_lower:
+                point_type = "camping"
+                icon = icons["camping"]
+                title = f"Camping ({row['Duree_Sejour']} nuits)"
+            elif row["Duree_Sejour"] > 1:
+                point_type = "séjour"
+                icon = icons["sejour"]
+                title = f"Séjour de {row['Duree_Sejour']} nuits"
+            else:
+                point_type = "étape"
+                icon = icons["camping"]
+                title = f"Étape {i}"
         else:
-            point_type = "étape"
-            icon = icons["etape"]
-            title = f"Étape {i}"
+            if row["Duree_Sejour"] > 1:
+                point_type = "séjour"
+                icon = icons["sejour"]
+                title = f"Séjour de {row['Duree_Sejour']} nuits"
+            else:
+                point_type = "étape"
+                icon = icons["camping"]
+                title = f"Étape {i}"
 
         color = colors[point_type]
 
@@ -141,6 +172,8 @@ def creer_carte(df, df_avec_duree, distances=None):
             tooltip_text = f"Départ: {ville} ({date_info})"
         elif point_type == "arrivée":
             tooltip_text = f"Arrivée: {ville} ({date_info})"
+        elif point_type == "camping":
+            tooltip_text = f"{ville} - Camping ({date_info})"
         elif point_type == "séjour":
             tooltip_text = f"{ville} - Séjour de {row['Duree_Sejour']} nuits ({date_info})"
         else:
@@ -157,8 +190,79 @@ def creer_carte(df, df_avec_duree, distances=None):
     # Ajouter une mini-carte
     folium.plugins.MiniMap().add_to(m)
 
+    # Ajouter le contrôle des couches pour basculer entre carte et satellite
+    folium.LayerControl().add_to(m)
+
     return m
 
+
+def afficher_emails_selectbox(df):
+    """
+    Affiche une liste déroulante pour sélectionner un hébergement et voir son email
+
+    Args:
+        df: DataFrame contenant les données des hébergements avec les liens d'emails
+    """
+    # Utiliser des variables d'état de session distinctes pour éviter les conflits
+    if "carte_email_a_ouvrir" not in st.session_state:
+        st.session_state.carte_email_a_ouvrir = None
+
+    # Filtrer pour ne garder que les lignes avec des emails valides
+    df_with_emails = df[pd.notna(df["Lien"]) & (df["Lien"] != "")].copy()
+
+    if not df_with_emails.empty:
+        # Créer les options pour la liste déroulante
+        options = []
+        email_links = {}
+
+        for i, row in df_with_emails.iterrows():
+            # Récupérer les informations pour l'affichage
+            ville = row["Ville"] if "Ville" in row and pd.notna(row["Ville"]) else ""
+            nom = row["Nom"] if "Nom" in row and pd.notna(row["Nom"]) else ""
+            nuit = row["Nuit"] if "Nuit" in row and pd.notna(row["Nuit"]) else ""
+
+            # Créer un label descriptif
+            label = f"{ville} - {nom} ({nuit})"
+            options.append(label)
+            email_links[label] = row["Lien"]
+
+        # Créer un titre et un séparateur
+        st.markdown("---")
+        st.subheader("📧 Emails de confirmation")
+
+        # Créer la liste déroulante et le bouton
+        col1, col2 = st.columns([3, 1])
+
+        with col1:
+            selected_option = st.selectbox(
+                "Sélectionner un hébergement pour voir son email de confirmation:",
+                options,
+                index=None,
+                placeholder="Choisir un hébergement...",
+                key="carte_email_selectbox"  # Clé unique pour éviter les conflits
+            )
+
+        with col2:
+            st.write("")  # Pour aligner le bouton avec la liste déroulante
+            st.write("")
+            if selected_option:
+                # Utiliser une clé unique pour le bouton
+                if st.button("📩 Voir l'email", type="primary", key="carte_email_button"):
+                    st.session_state.carte_email_a_ouvrir = email_links[selected_option]
+                    st.rerun()  # Recharger la page pour afficher l'email
+
+        # Afficher l'email sélectionné (seulement si un email a été sélectionné depuis cette interface)
+        if st.session_state.carte_email_a_ouvrir:
+            with st.expander("Email de confirmation", expanded=True):
+                # Appeler ouvrir_email avec use_expander=False pour éviter l'imbrication d'expanders
+                ouvrir_email(st.session_state.carte_email_a_ouvrir, use_expander=False)
+                # Utiliser une clé unique pour le bouton
+                if st.button("Fermer l'email", key="carte_email_close_button"):
+                    # Fermer l'email
+                    st.session_state.carte_email_a_ouvrir = None
+                    st.rerun()
+    else:
+        st.info("Aucun hébergement avec email de confirmation disponible.")
 
 def afficher_recapitulatif_metrics(df, distance_totale=None):
     """Affiche le récapitulatif du budget et de la distance en utilisant st.metrics"""
@@ -376,6 +480,8 @@ def main():
         # Créer et afficher la carte
         m = creer_carte(df, df_avec_duree, distances)
         st_folium(m, width=None, height=700)
+
+        afficher_emails_selectbox(df)
 
     with tab2:
         # Afficher le récapitulatif dans la sidebar (seulement dans l'onglet carte)
