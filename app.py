@@ -8,8 +8,10 @@ from core import (
     charger_donnees,
     sauvegarder_donnees,
     calculate_routes_osrm,
-    identifier_sejours_multiples
+    identifier_sejours_multiples,
+    ouvrir_email
 )
+from dataframe_with_button import editable_dataframe
 
 
 def configurer_page():
@@ -62,12 +64,12 @@ def creer_carte(df, df_avec_duree, distances=None):
         if pd.notna(df.iloc[i]["Chemin"]):
             route_coords = json.loads(df.iloc[i]["Chemin"])
             if route_coords:
-                # Calculer la distance
+                # Calculer la distance (limitée à 2 décimales)
                 distance_text = ""
                 if "Distance (km)" in df.columns and pd.notna(df.iloc[i]["Distance (km)"]):
-                    distance_text = f"{df.iloc[i]['Distance (km)']} km"
+                    distance_text = f"{df.iloc[i]['Distance (km)']:.2f} km"
                 elif distances is not None and i < len(distances) and pd.notna(distances[i]):
-                    distance_text = f"{round(distances[i] / 1000, 1)} km"
+                    distance_text = f"{(distances[i] / 1000):.2f} km"
 
                 # Tracer la route
                 route = folium.PolyLine(
@@ -175,20 +177,71 @@ def afficher_recapitulatif_sidebar(df, distance_totale=None):
 
 def creer_editeur_donnees(df):
     """Crée un éditeur de données pour modifier les informations du roadtrip"""
+    # Initialiser la variable de session pour les emails
+    if "email_a_ouvrir" not in st.session_state:
+        st.session_state.email_a_ouvrir = None
+
     # Définir les colonnes à cacher
-    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type']
+    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type', 'Distance (km)']
     df_visible = df.drop(columns=colonnes_cachees, errors="ignore")
 
-    # Sauvegarde d'une copie des adresses actuelles pour détecter les changements
+    # Sauvegarde d'une copie des adresses actuelles
     adresses_actuelles = df_visible["Adresse"].copy() if "Adresse" in df_visible.columns else pd.Series([])
 
+    # Configuration des colonnes pour l'éditeur
+    column_config = {
+        "Adresse": st.column_config.TextColumn("Adresse", width="large"),
+        "Ville": st.column_config.TextColumn("Ville", width="medium"),
+        "Nom": st.column_config.TextColumn("Hébergement", width="medium"),
+        "Prix": st.column_config.NumberColumn("Prix ($)", format="%.2f"),
+        "Nuit": st.column_config.DateColumn("Date", width="medium")
+    }
+
     # Édition interactive du tableau
-    edited_df = st.data_editor(df_visible,
-                               num_rows="dynamic",
-                               use_container_width=True,
-                               height=800,
-                               hide_index=True,
-                               )
+    edited_df = st.data_editor(
+        df_visible,
+        num_rows="fixed",
+        use_container_width=True,
+        height=400,  # Hauteur réduite pour faire de la place aux emails en-dessous
+        hide_index=True,
+        column_config=column_config
+    )
+
+    # Section pour les emails en-dessous du tableau d'édition
+    if "Lien" in df.columns:
+        # Filtrer les lignes qui ont un lien d'email
+        emails_df = df[pd.notna(df["Lien"])]
+
+        if not emails_df.empty:
+            st.write("### 📧 Emails de confirmation")
+
+            # Créer un conteneur pour les emails
+            email_container = st.container()
+
+            # Afficher les liens d'emails sous forme de boutons
+            n_cols = 3  # Nombre de boutons par ligne
+            emails_rows = [emails_df.iloc[i:i + n_cols] for i in range(0, len(emails_df), n_cols)]
+
+            for row_of_emails in emails_rows:
+                cols = st.columns(n_cols)
+                for i, (idx, email_row) in enumerate(row_of_emails.iterrows()):
+                    if i < len(cols):  # S'assurer que nous avons assez de colonnes
+                        nom_hebergement = email_row.get("Nom", f"Hébergement {idx + 1}")
+                        ville = email_row.get("Ville", "")
+                        button_text = f"📧 {nom_hebergement} ({ville})"
+
+                        if cols[i].button(button_text, key=f"email_btn_{idx}"):
+                            st.session_state.email_a_ouvrir = email_row["Lien"]
+                            st.rerun()
+
+    # Afficher l'email sélectionné
+    if st.session_state.email_a_ouvrir:
+        with st.expander("📧 Email de confirmation", expanded=True):
+            # Appeler ouvrir_email avec use_expander=False pour éviter l'imbrication d'expanders
+            ouvrir_email(st.session_state.email_a_ouvrir, use_expander=False)
+            if st.button("Fermer l'email"):
+                st.session_state.email_a_ouvrir = None
+                st.rerun()
 
     return edited_df, df_visible, adresses_actuelles
 
@@ -252,6 +305,7 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
 
 def main():
     """Fonction principale qui gère l'application Streamlit"""
+
     # Configuration de la page
     configurer_page()
 
@@ -259,25 +313,30 @@ def main():
     uploaded_file = 'data/hebergements_chemins.parquet'
     df = charger_donnees(nom_fichier=uploaded_file, format="parquet")
 
-    # Calculer les distances et les trajets
-    distances, routes, df = calculate_routes_osrm(df)
+    # Onglets pour différentes sections de l'application
+    tab1, tab2 = st.tabs(["🗺️ Carte", "📝 Données"])
 
-    # Identifier les séjours multiples
-    df_avec_duree = identifier_sejours_multiples(df)
+    with tab1:
+        # Calculer les distances et les trajets
+        distances, routes, df = calculate_routes_osrm(df)
 
-    # Créer et afficher la carte
-    m = creer_carte(df, df_avec_duree, distances)
-    st_folium(m, width=None, height=700)
+        # Identifier les séjours multiples
+        df_avec_duree = identifier_sejours_multiples(df)
 
-    # Créer l'éditeur de données
-    edited_df, df_visible, adresses_actuelles = creer_editeur_donnees(df)
+        # Créer et afficher la carte
+        m = creer_carte(df, df_avec_duree, distances)
+        st_folium(m, width=None, height=700)
 
-    # Afficher le récapitulatif dans la sidebar
-    afficher_recapitulatif_sidebar(df)
+        # Afficher le récapitulatif dans la sidebar (seulement dans l'onglet carte)
+        afficher_recapitulatif_sidebar(df)
 
-    # Bouton pour appliquer les modifications
-    if st.sidebar.button("🔄 Appliquer les modifications"):
-        traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file)
+    with tab2:
+        # Créer l'éditeur de données (qui gère aussi les emails)
+        edited_df, df_visible, adresses_actuelles = creer_editeur_donnees(df)
+
+        # Bouton pour appliquer les modifications
+        if st.button("🔄 Appliquer les modifications"):
+            traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file)
 
 
 if __name__ == "__main__":

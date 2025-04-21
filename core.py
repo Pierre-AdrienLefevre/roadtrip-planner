@@ -41,12 +41,6 @@ def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None
             # Convertir selon le format demandé
             if format == 'parquet':
                 return pd.read_parquet(buffer)
-            elif format == 'csv':
-                return pd.read_csv(buffer)
-            elif format == 'json':
-                return json.loads(decoded_content)
-            elif format == 'txt' or format == 'text':
-                return decoded_content.decode('utf-8')
             else:
                 buffer.seek(0)
                 return buffer
@@ -336,3 +330,86 @@ def identifier_sejours_multiples(df):
                 df_avec_duree.at[i, 'Duree_Sejour'] = -1
 
     return df_avec_duree
+
+
+def ouvrir_email(chemin_eml, use_expander=False):
+    """Fonction pour ouvrir un fichier EML et afficher son contenu dans l'application"""
+    try:
+        # Charger le fichier EML depuis GitHub
+        contenu_eml = charger_donnees(nom_fichier=chemin_eml, format="text")
+
+        if contenu_eml:
+            # Analyser le fichier EML
+            import email
+            from email import policy
+            from email.parser import BytesParser, Parser
+
+            # Traitement selon le type de contenu reçu
+            if isinstance(contenu_eml, bytes):
+                # Déjà en bytes, on peut l'utiliser directement
+                message = BytesParser(policy=policy.default).parsebytes(contenu_eml)
+            elif isinstance(contenu_eml, str):
+                # C'est une chaîne, on utilise Parser au lieu de BytesParser
+                message = Parser(policy=policy.default).parsestr(contenu_eml)
+            elif hasattr(contenu_eml, 'read'):
+                # C'est un objet file-like (comme BytesIO)
+                contenu_eml.seek(0)  # Remettre au début
+                contenu_bytes = contenu_eml.read()
+
+                # Vérifier si c'est bytes ou str
+                if isinstance(contenu_bytes, bytes):
+                    message = BytesParser(policy=policy.default).parsebytes(contenu_bytes)
+                else:
+                    message = Parser(policy=policy.default).parsestr(contenu_bytes)
+            else:
+                raise TypeError(f"Type de contenu non pris en charge: {type(contenu_eml)}")
+
+            # Extraire les informations
+            sujet = message.get("Subject", "")
+            expediteur = message.get("From", "")
+            date = message.get("Date", "")
+
+            # Trouver le corps du message
+            corps = ""
+            if message.is_multipart():
+                for part in message.iter_parts():
+                    content_type = part.get_content_type()
+                    if content_type == "text/plain":
+                        corps = part.get_content()
+                        break
+                    elif content_type == "text/html" and not corps:
+                        # On préfère le texte brut, mais on prend le HTML si c'est tout ce qu'on a
+                        corps = part.get_content()
+            else:
+                corps = message.get_content()
+
+            # Fonction pour afficher le contenu de l'email
+            def afficher_contenu_email():
+                st.write(f"**De:** {expediteur}")
+                st.write(f"**Date:** {date}")
+                st.write(f"**Sujet:** {sujet}")
+                st.markdown("---")
+
+                # Si le corps est en HTML, on peut l'afficher avec components.html
+                if isinstance(corps, str) and ("<html" in corps.lower() or "<body" in corps.lower()):
+                    import streamlit.components.v1 as components
+                    components.html(corps, height=500, scrolling=True)
+                else:
+                    st.write(corps)
+
+            # Afficher avec ou sans expander selon le paramètre
+            if use_expander:
+                with st.expander(f"Email: {sujet}", expanded=True):
+                    afficher_contenu_email()
+            else:
+                # Afficher un titre pour l'email
+                st.subheader(f"Email: {sujet}")
+                afficher_contenu_email()
+
+        else:
+            st.error("Impossible de charger le fichier email.")
+
+    except Exception as e:
+        st.error(f"Erreur lors de l'ouverture de l'email: {e}")
+        import traceback
+        st.error(traceback.format_exc())

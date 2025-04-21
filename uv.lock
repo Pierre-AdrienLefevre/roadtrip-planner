@@ -270,6 +270,19 @@ wheels = [
 ]
 
 [[package]]
+name = "dataframe-with-buttons"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pandas" },
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a2/21/fe0ec2a93eaeb73ca9ed7951dc3f1e917dac775e771a983f92655441d081/dataframe_with_buttons-1.0.0.tar.gz", hash = "sha256:87e111b214cad1810b4e27a1a3fc77b02512d5bb99ad8fe6e564ea9e34e6810b", size = 784136 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/fe/4a692486843508014f4b3e5d3202c1d632f98f4c752e1d593fc0dd46a43f/dataframe_with_buttons-1.0.0-py3-none-any.whl", hash = "sha256:ecb77d65c2f19d881323dac4c4daa522496903c14163d03cc6029135d683b29c", size = 791337 },
+]
+
+[[package]]
 name = "deprecated"
 version = "1.2.18"
 source = { registry = "https://pypi.org/simple" }
@@ -862,9 +875,10 @@ wheels = [
 
 [[package]]
 name = "road-trip"
-version = "1.0"
+version = "1.1"
 source = { virtual = "." }
 dependencies = [
+    { name = "dataframe-with-buttons" },
     { name = "folium" },
     { name = "opencage" },
     { name = "pandas" },
@@ -877,6 +891,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dataframe-with-buttons", specifier = ">=1.0.0" },
     { name = "folium", specifier = "~=0.19" },
     { name = "opencage", specifier = "~=3.1" },
     { name = "pandas", specifier = "~=2.2" },
