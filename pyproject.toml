@@ -5,7 +5,6 @@ description = "Road Trip Planner"
 readme = "README.md"
 requires-python = "~=3.12"
 dependencies = [
-    "dataframe-with-buttons>=1.0.0",
     "folium~=0.19",
     "opencage~=3.1",
     "pandas~=2.2",
