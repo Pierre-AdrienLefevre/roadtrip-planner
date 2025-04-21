@@ -8,7 +8,8 @@ from core import (
     charger_donnees,
     sauvegarder_donnees,
     calculate_routes_osrm,
-    identifier_sejours_multiples
+    identifier_sejours_multiples,
+    ouvrir_email
 )
 
 
@@ -62,12 +63,12 @@ def creer_carte(df, df_avec_duree, distances=None):
         if pd.notna(df.iloc[i]["Chemin"]):
             route_coords = json.loads(df.iloc[i]["Chemin"])
             if route_coords:
-                # Calculer la distance
+                # Calculer la distance (limitée à 2 décimales)
                 distance_text = ""
                 if "Distance (km)" in df.columns and pd.notna(df.iloc[i]["Distance (km)"]):
-                    distance_text = f"{df.iloc[i]['Distance (km)']} km"
+                    distance_text = f"{df.iloc[i]['Distance (km)']:.2f} km"
                 elif distances is not None and i < len(distances) and pd.notna(distances[i]):
-                    distance_text = f"{round(distances[i] / 1000, 1)} km"
+                    distance_text = f"{(distances[i] / 1000):.2f} km"
 
                 # Tracer la route
                 route = folium.PolyLine(
@@ -159,39 +160,138 @@ def creer_carte(df, df_avec_duree, distances=None):
     return m
 
 
-def afficher_recapitulatif_sidebar(df, distance_totale=None):
-    """Affiche le récapitulatif du budget et de la distance dans la sidebar"""
-    st.sidebar.subheader("💰 Récapitulatif budget et distance")
+def afficher_recapitulatif_metrics(df, distance_totale=None):
+    """Affiche le récapitulatif du budget et de la distance en utilisant st.metrics"""
 
-    # Afficher le budget total
+    # Créer une ligne avec deux colonnes pour les métriques
+    col1, col2 = st.columns(2)
+
+    # Afficher le budget total dans la première colonne
     total_budget = df["Prix"].sum(skipna=True)
-    st.sidebar.write(f"**Budget total pour les hébergements :** {total_budget:.2f} $")
+    with col1:
+        st.metric(
+            label="💰 Budget total hébergements",
+            value=f"{total_budget:.2f} $"
+        )
 
-    # Afficher la distance totale
+    # Afficher la distance totale dans la seconde colonne
     if distance_totale is None:
         distance_totale = df["Distance (km)"].sum(skipna=True)
-    st.sidebar.write(f"**Distance totale :** {distance_totale:.2f} km")
+    with col2:
+        st.metric(
+            label="🚗 Distance totale",
+            value=f"{distance_totale:.2f} km"
+        )
 
 
 def creer_editeur_donnees(df):
     """Crée un éditeur de données pour modifier les informations du roadtrip"""
+    # Initialiser les variables de session
+    if "email_a_ouvrir" not in st.session_state:
+        st.session_state.email_a_ouvrir = None
+    if "previous_checked_idx" not in st.session_state:
+        st.session_state.previous_checked_idx = None
+
     # Définir les colonnes à cacher
-    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type']
+    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type', 'Distance (km)']
     df_visible = df.drop(columns=colonnes_cachees, errors="ignore")
 
-    # Sauvegarde d'une copie des adresses actuelles pour détecter les changements
+    # Sauvegarde d'une copie des adresses actuelles
     adresses_actuelles = df_visible["Adresse"].copy() if "Adresse" in df_visible.columns else pd.Series([])
 
+    # Ajouter une colonne de checkbox pour les emails
+    if "Lien" in df.columns:
+        # Créer une colonne Afficher Email
+        df_visible = df_visible.copy()  # Éviter SettingWithCopyWarning
+        df_visible["Afficher Email"] = False
+
+        # Si un email est ouvert, cocher la case correspondante
+        if st.session_state.email_a_ouvrir is not None and st.session_state.previous_checked_idx is not None:
+            if st.session_state.previous_checked_idx in df_visible.index:
+                df_visible.loc[st.session_state.previous_checked_idx, "Afficher Email"] = True
+
+        # Réorganiser les colonnes pour avoir Afficher Email en premier et Lien en dernier
+        cols = list(df_visible.columns)
+        # Retirer Afficher Email et Lien des colonnes (s'ils existent)
+        if "Afficher Email" in cols:
+            cols.remove("Afficher Email")
+        if "Lien" in cols:
+            cols.remove("Lien")
+
+        # Recréer la liste des colonnes dans le bon ordre
+        new_cols = ["Afficher Email"] + cols
+        if "Lien" in df_visible.columns:
+            new_cols = new_cols + ["Lien"]
+
+        # Réorganiser le DataFrame
+        df_visible = df_visible[new_cols]
+
+    # Configuration des colonnes pour l'éditeur
+    column_config = {
+        "Afficher Email": st.column_config.CheckboxColumn("📧", help="Cocher pour afficher l'email"),
+        "Adresse": st.column_config.TextColumn("Adresse", width="large"),
+        "Ville": st.column_config.TextColumn("Ville", width="medium"),
+        "Nom": st.column_config.TextColumn("Hébergement", width="medium"),
+        "Prix": st.column_config.NumberColumn("Prix ($)", format="%.2f", width='small'),
+        "Nuit": st.column_config.DateColumn("Nuit", width="small"),
+        "Lien": st.column_config.TextColumn("Lien", width="small")
+    }
+
     # Édition interactive du tableau
-    edited_df = st.data_editor(df_visible,
-                               num_rows="dynamic",
-                               use_container_width=True,
-                               height=800,
-                               hide_index=True,
-                               )
+    edited_df = st.data_editor(
+        df_visible,
+        num_rows="fixed",
+        use_container_width=True,
+        height=600,
+        hide_index=True,
+        column_config=column_config
+    )
+
+    # Traiter les changements de checkbox
+    if "Lien" in df.columns and "Afficher Email" in edited_df.columns:
+        # Identifier les lignes avec checkbox cochée
+        email_checked_rows = edited_df[edited_df["Afficher Email"] == True]
+
+        # Si une nouvelle checkbox est cochée
+        if not email_checked_rows.empty:
+            checked_row_idx = email_checked_rows.index[0]
+
+            # Si c'est une nouvelle ligne cochée ou si aucun email n'est actuellement ouvert
+            if checked_row_idx != st.session_state.previous_checked_idx or st.session_state.email_a_ouvrir is None:
+                # Récupérer le lien d'email correspondant
+                if checked_row_idx in df.index and pd.notna(df.loc[checked_row_idx, "Lien"]):
+                    st.session_state.email_a_ouvrir = df.loc[checked_row_idx, "Lien"]
+                    st.session_state.previous_checked_idx = checked_row_idx
+                    st.rerun()  # Recharger la page pour afficher l'email
+
+            # Décocher toutes les autres checkboxes
+            for idx in edited_df.index:
+                if idx != checked_row_idx and edited_df.loc[idx, "Afficher Email"]:
+                    edited_df.loc[idx, "Afficher Email"] = False
+
+        # Si toutes les checkboxes sont décochées mais qu'un email est ouvert
+        elif email_checked_rows.empty and st.session_state.email_a_ouvrir is not None:
+            # Si l'utilisateur a décoché la case, fermer l'email
+            st.session_state.email_a_ouvrir = None
+            st.session_state.previous_checked_idx = None
+            st.rerun()  # Recharger la page pour fermer l'email
+
+    # Afficher l'email sélectionné
+    if st.session_state.email_a_ouvrir:
+        with st.expander("📧 Email de confirmation", expanded=True):
+            # Appeler ouvrir_email avec use_expander=False pour éviter l'imbrication d'expanders
+            ouvrir_email(st.session_state.email_a_ouvrir, use_expander=False)
+            if st.button("Fermer l'email"):
+                # Fermer l'email et décocher la case
+                st.session_state.email_a_ouvrir = None
+                st.session_state.previous_checked_idx = None
+                # Cette ligne ne suffit pas car edited_df ne persiste pas après st.rerun()
+                # C'est pourquoi nous utilisons previous_checked_idx pour suivre l'état
+                if "Afficher Email" in edited_df.columns:
+                    edited_df["Afficher Email"] = False
+                st.rerun()
 
     return edited_df, df_visible, adresses_actuelles
-
 
 def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file):
     """Traite les modifications apportées aux données et recalcule les distances si nécessaire"""
@@ -252,6 +352,7 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
 
 def main():
     """Fonction principale qui gère l'application Streamlit"""
+
     # Configuration de la page
     configurer_page()
 
@@ -259,25 +360,33 @@ def main():
     uploaded_file = 'data/hebergements_chemins.parquet'
     df = charger_donnees(nom_fichier=uploaded_file, format="parquet")
 
-    # Calculer les distances et les trajets
-    distances, routes, df = calculate_routes_osrm(df)
+    # Onglets pour différentes sections de l'application
+    tab1, tab2 = st.tabs(["🗺️ Carte", "📝 Données"])
 
-    # Identifier les séjours multiples
-    df_avec_duree = identifier_sejours_multiples(df)
+    with tab1:
+        # Calculer les distances et les trajets
+        distances, routes, df = calculate_routes_osrm(df)
 
-    # Créer et afficher la carte
-    m = creer_carte(df, df_avec_duree, distances)
-    st_folium(m, width=None, height=700)
+        # Identifier les séjours multiples
+        df_avec_duree = identifier_sejours_multiples(df)
 
-    # Créer l'éditeur de données
-    edited_df, df_visible, adresses_actuelles = creer_editeur_donnees(df)
+        # Afficher le récapitulatif dans la sidebar (seulement dans l'onglet carte)
+        afficher_recapitulatif_metrics(df)
 
-    # Afficher le récapitulatif dans la sidebar
-    afficher_recapitulatif_sidebar(df)
+        # Créer et afficher la carte
+        m = creer_carte(df, df_avec_duree, distances)
+        st_folium(m, width=None, height=700)
 
-    # Bouton pour appliquer les modifications
-    if st.sidebar.button("🔄 Appliquer les modifications"):
-        traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file)
+    with tab2:
+        # Afficher le récapitulatif dans la sidebar (seulement dans l'onglet carte)
+        afficher_recapitulatif_metrics(df)
+
+        # Créer l'éditeur de données (qui gère aussi les emails)
+        edited_df, df_visible, adresses_actuelles = creer_editeur_donnees(df)
+
+        # Bouton pour appliquer les modifications
+        if st.button("🔄 Appliquer les modifications"):
+            traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file)
 
 
 if __name__ == "__main__":
