@@ -183,11 +183,11 @@ def add_lat_lon(df, address_column="Adresse"):
 
 
 def get_osrm_route(lat1, lon1, lat2, lon2):
-    """Interroge OSRM pour obtenir le tracé et la distance entre deux points."""
+    """Interroge OSRM pour obtenir le tracé, la distance et la durée entre deux points."""
     # Vérifier que les coordonnées sont valides
     if None in (lat1, lon1, lat2, lon2):
         print("Coordonnées invalides, impossible de calculer l'itinéraire.")
-        return None, None
+        return None, None, None
 
     url = (
         f"http://router.project-osrm.org/route/v1/driving/"
@@ -200,13 +200,15 @@ def get_osrm_route(lat1, lon1, lat2, lon2):
         if data.get("routes"):
             route = data["routes"][0]
             distance_km = route["distance"] / 1000  # Conversion en km
+            duration_hours = route["duration"] / 3600  # Conversion en heures
+            duration_hours = duration_hours * 0.75
             route_coords = polyline.decode(route["geometry"])  # Liste de (lat, lon)
-            return distance_km, json.dumps(route_coords)  # Sauvegarde en JSON
-    return None, None
+            return distance_km, duration_hours, json.dumps(route_coords)  # Sauvegarde en JSON
+    return None, None, None
 
 
 def calculate_routes_osrm(df):
-    """Calcule les distances et les trajets avec OSRM si non enregistrés."""
+    """Calcule les distances, durées et les trajets avec OSRM si non enregistrés."""
     # Créer une copie du DataFrame pour éviter de modifier l'original
     df = df.copy()
 
@@ -219,6 +221,8 @@ def calculate_routes_osrm(df):
         df["Chemin"] = None
     if "Distance (km)" not in df.columns:
         df["Distance (km)"] = None
+    if "Durée (h)" not in df.columns:
+        df["Durée (h)"] = None
 
     # Vérifier s'il y a des coordonnées manquantes et les ajouter
     missing_coords = df[df["Latitude"].isna() | df["Longitude"].isna()].index
@@ -234,6 +238,7 @@ def calculate_routes_osrm(df):
 
     # Initialiser les listes pour stocker les résultats
     distances = []
+    durations = []
     route_geoms = []
 
     # Calculer les itinéraires pour chaque segment
@@ -251,20 +256,28 @@ def calculate_routes_osrm(df):
                 if isinstance(route_coords, str):
                     route_coords = json.loads(route_coords)
                 distance = df.iloc[i]["Distance (km)"]
+                duration = df.iloc[i]["Durée (h)"] if "Durée (h)" in df.columns and pd.notna(
+                    df.iloc[i]["Durée (h)"]) else None
+
+                # Si la durée n'est pas disponible, on recalcule tout
+                if duration is None:
+                    distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
             except Exception as e:
                 st.warning(f"Erreur lors de la lecture du chemin à l'index {i}: {e}")
-                distance, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
+                distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
         # Sinon, on calcule un nouveau tracé si les coordonnées sont valides
         elif valid_coords:
-            distance, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
+            distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
         # Si les coordonnées sont invalides, on ne peut pas calculer de tracé
         else:
             st.warning(f"Coordonnées manquantes pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire.")
             distance = None
+            duration = None
             route_coords = json.dumps([])
 
         # Mettre à jour le DataFrame directement
         df.at[i, "Distance (km)"] = distance
+        df.at[i, "Durée (h)"] = duration
 
         # S'assurer que route_coords est au format JSON
         if isinstance(route_coords, list):
@@ -273,13 +286,15 @@ def calculate_routes_osrm(df):
 
         # Stocker pour retour de fonction
         distances.append(distance)
+        durations.append(duration)
         route_geoms.append(route_coords)
 
     # Ajouter une dernière valeur pour correspondre à la taille du DataFrame
     distances.append(None)
+    durations.append(None)
     route_geoms.append(json.dumps([]))
 
-    return distances, route_geoms, df
+    return distances, durations, route_geoms, df
 
 
 def identifier_sejours_multiples(df):
