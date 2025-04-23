@@ -332,53 +332,38 @@ def identifier_sejours_multiples(df):
     return df_avec_duree
 
 
-def ouvrir_pdf(chemin_pdf, use_expander=False):
+def ouvrir_pdf(pdf_path, use_expander=True):
     """
-    Version minimale pour afficher un PDF dans Streamlit
+    Affiche un PDF de manière sécurisée sur Streamlit Cloud
 
     Args:
-        chemin_pdf: Chemin du fichier PDF à charger
-        use_expander: Utiliser un expander pour afficher le PDF
+        pdf_path: Chemin vers le fichier PDF
+        use_expander: Booléen pour déterminer si le PDF doit être affiché dans un expander
     """
     try:
-        import os
+        # Au lieu d'ouvrir directement le fichier local, utilisez st.components.iframe
+        # ou la méthode de base64 pour l'affichage
 
-        # Charger le fichier PDF depuis GitHub
-        contenu_pdf = charger_donnees(nom_fichier=chemin_pdf, format="binary")
-
-        if not contenu_pdf:
-            st.error("Impossible de charger le fichier PDF.")
-            return
-
-        # Extraire le nom du fichier du chemin
-        nom_fichier = os.path.basename(chemin_pdf)
-
-        # Préparer les données binaires
-        if hasattr(contenu_pdf, 'read'):
-            contenu_pdf.seek(0)
-            pdf_data = contenu_pdf.read()
-        else:
-            pdf_data = contenu_pdf
-
-        # Fonction pour l'affichage du contenu
-        def afficher_contenu():
-            # Titre et bouton de téléchargement
-            st.subheader(f"📄 {nom_fichier}")
-
-            # Solution de repli simple avec iframe
-            import base64
-            b64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="1000" type="application/pdf"></iframe>'
+        # Solution 1: Si vos PDF sont accessibles via URL (stockés sur un service cloud)
+        if pdf_path.startswith(('http://', 'https://')):
+            # Utilisez un iframe pour afficher le PDF
+            pdf_display = f'<iframe src="{pdf_path}" width="100%" height="800" allow="autoplay"></iframe>'
             st.markdown(pdf_display, unsafe_allow_html=True)
 
-        # Afficher avec ou sans expander
-        if use_expander:
-            with st.expander(f"Document: {nom_fichier}", expanded=True):
-                afficher_contenu()
+        # Solution 2: Si vos PDF sont stockés localement (cette méthode ne fonctionnera
+        # que si Streamlit peut accéder aux fichiers)
         else:
-            afficher_contenu()
+            import base64
+
+            # Ouvrir le PDF en mode binaire et le convertir en base64
+            with open(pdf_path, "rb") as f:
+                base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+
+            # Intégrer le PDF en base64 dans un tag HTML
+            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
 
     except Exception as e:
-        st.error(f"Erreur lors de l'ouverture du PDF: {e}")
-        import traceback
-        st.error(traceback.format_exc())
+        st.error(f"Erreur lors de l'affichage du PDF: {e}")
+        st.info(
+            "Conseil: Pour déployer sur Streamlit Cloud, stockez vos PDFs sur un service cloud comme AWS S3, Google Cloud Storage ou Dropbox, puis utilisez les URLs publiques.")
