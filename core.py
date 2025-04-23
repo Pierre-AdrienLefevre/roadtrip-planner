@@ -332,38 +332,77 @@ def identifier_sejours_multiples(df):
     return df_avec_duree
 
 
-def ouvrir_pdf(pdf_path, use_expander=True):
+def ouvrir_pdf(chemin_pdf, use_expander=False):
     """
-    Affiche un PDF de manière sécurisée sur Streamlit Cloud
+    Version améliorée pour afficher un PDF dans Streamlit Cloud
 
     Args:
-        pdf_path: Chemin vers le fichier PDF
-        use_expander: Booléen pour déterminer si le PDF doit être affiché dans un expander
+        chemin_pdf: Chemin du fichier PDF à charger
+        use_expander: Utiliser un expander pour afficher le PDF
     """
     try:
-        # Au lieu d'ouvrir directement le fichier local, utilisez st.components.iframe
-        # ou la méthode de base64 pour l'affichage
+        import os
+        import base64
+        from streamlit.components.v1 import html
 
-        # Solution 1: Si vos PDF sont accessibles via URL (stockés sur un service cloud)
-        if pdf_path.startswith(('http://', 'https://')):
-            # Utilisez un iframe pour afficher le PDF
-            pdf_display = f'<iframe src="{pdf_path}" width="100%" height="800" allow="autoplay"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
+        # Charger le fichier PDF depuis GitHub
+        contenu_pdf = charger_donnees(nom_fichier=chemin_pdf, format="binary")
 
-        # Solution 2: Si vos PDF sont stockés localement (cette méthode ne fonctionnera
-        # que si Streamlit peut accéder aux fichiers)
+        if not contenu_pdf:
+            st.error("Impossible de charger le fichier PDF.")
+            return
+
+        # Extraire le nom du fichier du chemin
+        nom_fichier = os.path.basename(chemin_pdf)
+
+        # Préparer les données binaires
+        if hasattr(contenu_pdf, 'read'):
+            contenu_pdf.seek(0)
+            pdf_data = contenu_pdf.read()
         else:
-            import base64
+            pdf_data = contenu_pdf
 
-            # Ouvrir le PDF en mode binaire et le convertir en base64
-            with open(pdf_path, "rb") as f:
-                base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+        # Fonction pour l'affichage du contenu
+        def afficher_contenu():
+            # Titre et bouton de téléchargement
+            st.subheader(f"📄 {nom_fichier}")
 
-            # Intégrer le PDF en base64 dans un tag HTML
-            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
+            # Bouton de téléchargement
+            st.download_button(
+                label="⬇️ Télécharger le PDF",
+                data=pdf_data,
+                file_name=nom_fichier,
+                mime="application/pdf"
+            )
+
+            # Utiliser st.components.v1.html pour afficher le PDF de manière plus sécurisée
+            b64_pdf = base64.b64encode(pdf_data).decode('utf-8')
+
+            # Créer le HTML avec PDF.js pour un affichage plus compatible
+            pdf_display = f"""
+            <div style="width:100%; height:800px;">
+                <object
+                    data="data:application/pdf;base64,{b64_pdf}"
+                    type="application/pdf"
+                    width="100%"
+                    height="100%">
+                    <p>Le navigateur ne peut pas afficher le PDF. 
+                    <a href="data:application/pdf;base64,{b64_pdf}" download="{nom_fichier}">
+                    Télécharger le PDF</a> à la place.</p>
+                </object>
+            </div>
+            """
+
+            html(pdf_display, height=800)
+
+        # Afficher avec ou sans expander
+        if use_expander:
+            with st.expander(f"Document: {nom_fichier}", expanded=True):
+                afficher_contenu()
+        else:
+            afficher_contenu()
 
     except Exception as e:
-        st.error(f"Erreur lors de l'affichage du PDF: {e}")
-        st.info(
-            "Conseil: Pour déployer sur Streamlit Cloud, stockez vos PDFs sur un service cloud comme AWS S3, Google Cloud Storage ou Dropbox, puis utilisez les URLs publiques.")
+        st.error(f"Erreur lors de l'ouverture du PDF: {e}")
+        import traceback
+        st.error(traceback.format_exc())
