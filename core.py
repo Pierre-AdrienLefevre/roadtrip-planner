@@ -334,7 +334,7 @@ def identifier_sejours_multiples(df):
 
 def ouvrir_pdf(chemin_pdf, use_expander=False):
     """
-    Version minimale pour afficher un PDF dans Streamlit
+    Version avec conversion PDF en images pour une meilleure compatibilité
 
     Args:
         chemin_pdf: Chemin du fichier PDF à charger
@@ -342,8 +342,11 @@ def ouvrir_pdf(chemin_pdf, use_expander=False):
     """
     try:
         import os
+        import tempfile
+        import streamlit as st
+        import base64
 
-        # Charger le fichier PDF depuis GitHub
+        # Charger le fichier PDF
         contenu_pdf = charger_donnees(nom_fichier=chemin_pdf, format="binary")
 
         if not contenu_pdf:
@@ -362,14 +365,32 @@ def ouvrir_pdf(chemin_pdf, use_expander=False):
 
         # Fonction pour l'affichage du contenu
         def afficher_contenu():
-            # Titre et bouton de téléchargement
             st.subheader(f"📄 {nom_fichier}")
 
-            # Solution de repli simple avec iframe
-            import base64
-            b64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="1000" type="application/pdf"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
+            # Bouton de téléchargement
+            st.download_button(
+                label="Télécharger le PDF",
+                data=pdf_data,
+                file_name=nom_fichier,
+                mime="application/pdf"
+            )
+
+            # Créer un objet iframe avec un sandbox pour plus de sécurité
+            pdf_b64 = base64.b64encode(pdf_data).decode('utf-8')
+
+            html_string = f'''
+            <object data="data:application/pdf;base64,{pdf_b64}" 
+                    type="application/pdf"
+                    width="100%" 
+                    height="800">
+                <p>Le navigateur ne peut pas afficher le PDF. 
+                   <a href="data:application/pdf;base64,{pdf_b64}" download="{nom_fichier}">
+                   Cliquez ici pour télécharger</a>
+                </p>
+            </object>
+            '''
+
+            st.markdown(html_string, unsafe_allow_html=True)
 
         # Afficher avec ou sans expander
         if use_expander:
