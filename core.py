@@ -332,84 +332,53 @@ def identifier_sejours_multiples(df):
     return df_avec_duree
 
 
-def ouvrir_email(chemin_eml, use_expander=False):
-    """Fonction pour ouvrir un fichier EML et afficher son contenu dans l'application"""
+def ouvrir_pdf(chemin_pdf, use_expander=False):
+    """
+    Version minimale pour afficher un PDF dans Streamlit
+
+    Args:
+        chemin_pdf: Chemin du fichier PDF à charger
+        use_expander: Utiliser un expander pour afficher le PDF
+    """
     try:
-        # Charger le fichier EML depuis GitHub
-        contenu_eml = charger_donnees(nom_fichier=chemin_eml, format="text")
+        import os
 
-        if contenu_eml:
-            # Analyser le fichier EML
-            import email
-            from email import policy
-            from email.parser import BytesParser, Parser
+        # Charger le fichier PDF depuis GitHub
+        contenu_pdf = charger_donnees(nom_fichier=chemin_pdf, format="binary")
 
-            # Traitement selon le type de contenu reçu
-            if isinstance(contenu_eml, bytes):
-                # Déjà en bytes, on peut l'utiliser directement
-                message = BytesParser(policy=policy.default).parsebytes(contenu_eml)
-            elif isinstance(contenu_eml, str):
-                # C'est une chaîne, on utilise Parser au lieu de BytesParser
-                message = Parser(policy=policy.default).parsestr(contenu_eml)
-            elif hasattr(contenu_eml, 'read'):
-                # C'est un objet file-like (comme BytesIO)
-                contenu_eml.seek(0)  # Remettre au début
-                contenu_bytes = contenu_eml.read()
+        if not contenu_pdf:
+            st.error("Impossible de charger le fichier PDF.")
+            return
 
-                # Vérifier si c'est bytes ou str
-                if isinstance(contenu_bytes, bytes):
-                    message = BytesParser(policy=policy.default).parsebytes(contenu_bytes)
-                else:
-                    message = Parser(policy=policy.default).parsestr(contenu_bytes)
-            else:
-                raise TypeError(f"Type de contenu non pris en charge: {type(contenu_eml)}")
+        # Extraire le nom du fichier du chemin
+        nom_fichier = os.path.basename(chemin_pdf)
 
-            # Extraire les informations
-            sujet = message.get("Subject", "")
-            expediteur = message.get("From", "")
-            date = message.get("Date", "")
-
-            # Trouver le corps du message
-            corps = ""
-            if message.is_multipart():
-                for part in message.iter_parts():
-                    content_type = part.get_content_type()
-                    if content_type == "text/plain":
-                        corps = part.get_content()
-                        break
-                    elif content_type == "text/html" and not corps:
-                        # On préfère le texte brut, mais on prend le HTML si c'est tout ce qu'on a
-                        corps = part.get_content()
-            else:
-                corps = message.get_content()
-
-            # Fonction pour afficher le contenu de l'email
-            def afficher_contenu_email():
-                st.write(f"**De:** {expediteur}")
-                st.write(f"**Date:** {date}")
-                st.write(f"**Sujet:** {sujet}")
-                st.markdown("---")
-
-                # Si le corps est en HTML, on peut l'afficher avec components.html
-                if isinstance(corps, str) and ("<html" in corps.lower() or "<body" in corps.lower()):
-                    import streamlit.components.v1 as components
-                    components.html(corps, height=500, scrolling=True)
-                else:
-                    st.write(corps)
-
-            # Afficher avec ou sans expander selon le paramètre
-            if use_expander:
-                with st.expander(f"Email: {sujet}", expanded=True):
-                    afficher_contenu_email()
-            else:
-                # Afficher un titre pour l'email
-                st.subheader(f"Email: {sujet}")
-                afficher_contenu_email()
-
+        # Préparer les données binaires
+        if hasattr(contenu_pdf, 'read'):
+            contenu_pdf.seek(0)
+            pdf_data = contenu_pdf.read()
         else:
-            st.error("Impossible de charger le fichier email.")
+            pdf_data = contenu_pdf
+
+        # Fonction pour l'affichage du contenu
+        def afficher_contenu():
+            # Titre et bouton de téléchargement
+            st.subheader(f"📄 {nom_fichier}")
+
+            # Solution de repli simple avec iframe
+            import base64
+            b64_pdf = base64.b64encode(pdf_data).decode('utf-8')
+            pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="1000" type="application/pdf"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
+
+        # Afficher avec ou sans expander
+        if use_expander:
+            with st.expander(f"Document: {nom_fichier}", expanded=True):
+                afficher_contenu()
+        else:
+            afficher_contenu()
 
     except Exception as e:
-        st.error(f"Erreur lors de l'ouverture de l'email: {e}")
+        st.error(f"Erreur lors de l'ouverture du PDF: {e}")
         import traceback
         st.error(traceback.format_exc())
