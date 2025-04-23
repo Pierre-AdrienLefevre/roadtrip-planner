@@ -9,7 +9,7 @@ from core import (
     sauvegarder_donnees,
     calculate_routes_osrm,
     identifier_sejours_multiples,
-    ouvrir_email
+    ouvrir_pdf,
 )
 
 
@@ -196,26 +196,26 @@ def creer_carte(df, df_avec_duree, distances=None):
     return m
 
 
-def afficher_emails_selectbox(df):
+def afficher_pdfs_selectbox(df):
     """
-    Affiche une liste déroulante pour sélectionner un hébergement et voir son email
+    Affiche une liste déroulante pour sélectionner un hébergement et voir son PDF
 
     Args:
-        df: DataFrame contenant les données des hébergements avec les liens d'emails
+        df: DataFrame contenant les données des hébergements avec les liens de PDF
     """
     # Utiliser des variables d'état de session distinctes pour éviter les conflits
-    if "carte_email_a_ouvrir" not in st.session_state:
-        st.session_state.carte_email_a_ouvrir = None
+    if "carte_pdf_a_ouvrir" not in st.session_state:
+        st.session_state.carte_pdf_a_ouvrir = None
 
-    # Filtrer pour ne garder que les lignes avec des emails valides
-    df_with_emails = df[pd.notna(df["Lien"]) & (df["Lien"] != "")].copy()
+    # Filtrer pour ne garder que les lignes avec des liens PDF valides
+    df_with_pdfs = df[pd.notna(df["Lien"]) & (df["Lien"] != "")].copy()
 
-    if not df_with_emails.empty:
+    if not df_with_pdfs.empty:
         # Créer les options pour la liste déroulante
         options = []
-        email_links = {}
+        pdf_links = {}
 
-        for i, row in df_with_emails.iterrows():
+        for i, row in df_with_pdfs.iterrows():
             # Récupérer les informations pour l'affichage
             ville = row["Ville"] if "Ville" in row and pd.notna(row["Ville"]) else ""
             nom = row["Nom"] if "Nom" in row and pd.notna(row["Nom"]) else ""
@@ -224,22 +224,22 @@ def afficher_emails_selectbox(df):
             # Créer un label descriptif
             label = f"{ville} - {nom} ({nuit})"
             options.append(label)
-            email_links[label] = row["Lien"]
+            pdf_links[label] = row["Lien"]
 
         # Créer un titre et un séparateur
         st.markdown("---")
-        st.subheader("📧 Emails de confirmation")
+        st.subheader("📄 Documents PDF")
 
         # Créer la liste déroulante et le bouton
         col1, col2 = st.columns([3, 1])
 
         with col1:
             selected_option = st.selectbox(
-                "Sélectionner un hébergement pour voir son email de confirmation:",
+                "Sélectionner un hébergement pour voir son document PDF:",
                 options,
                 index=None,
                 placeholder="Choisir un hébergement...",
-                key="carte_email_selectbox"  # Clé unique pour éviter les conflits
+                key="carte_pdf_selectbox"  # Clé unique pour éviter les conflits
             )
 
         with col2:
@@ -247,22 +247,22 @@ def afficher_emails_selectbox(df):
             st.write("")
             if selected_option:
                 # Utiliser une clé unique pour le bouton
-                if st.button("📩 Voir l'email", type="primary", key="carte_email_button"):
-                    st.session_state.carte_email_a_ouvrir = email_links[selected_option]
-                    st.rerun()  # Recharger la page pour afficher l'email
+                if st.button("📄 Voir le PDF", type="primary", key="carte_pdf_button"):
+                    st.session_state.carte_pdf_a_ouvrir = pdf_links[selected_option]
+                    st.rerun()  # Recharger la page pour afficher le PDF
 
-        # Afficher l'email sélectionné (seulement si un email a été sélectionné depuis cette interface)
-        if st.session_state.carte_email_a_ouvrir:
-            with st.expander("Email de confirmation", expanded=True):
-                # Appeler ouvrir_email avec use_expander=False pour éviter l'imbrication d'expanders
-                ouvrir_email(st.session_state.carte_email_a_ouvrir, use_expander=False)
+        # Afficher le PDF sélectionné (seulement si un PDF a été sélectionné depuis cette interface)
+        if st.session_state.carte_pdf_a_ouvrir:
+            with st.expander("Document PDF", expanded=True):
+                # Appeler ouvrir_pdf avec use_expander=False pour éviter l'imbrication d'expanders
+                ouvrir_pdf(st.session_state.carte_pdf_a_ouvrir, use_expander=False)
                 # Utiliser une clé unique pour le bouton
-                if st.button("Fermer l'email", key="carte_email_close_button"):
-                    # Fermer l'email
-                    st.session_state.carte_email_a_ouvrir = None
+                if st.button("Fermer le PDF", key="carte_pdf_close_button"):
+                    # Fermer le PDF
+                    st.session_state.carte_pdf_a_ouvrir = None
                     st.rerun()
     else:
-        st.info("Aucun hébergement avec email de confirmation disponible.")
+        st.info("Aucun hébergement avec document PDF disponible.")
 
 def afficher_recapitulatif_metrics(df, distance_totale=None):
     """Affiche le récapitulatif du budget et de la distance en utilisant st.metrics"""
@@ -291,8 +291,8 @@ def afficher_recapitulatif_metrics(df, distance_totale=None):
 def creer_editeur_donnees(df):
     """Crée un éditeur de données pour modifier les informations du roadtrip"""
     # Initialiser les variables de session
-    if "email_a_ouvrir" not in st.session_state:
-        st.session_state.email_a_ouvrir = None
+    if "pdf_a_ouvrir" not in st.session_state:
+        st.session_state.pdf_a_ouvrir = None
     if "previous_checked_idx" not in st.session_state:
         st.session_state.previous_checked_idx = None
 
@@ -303,27 +303,27 @@ def creer_editeur_donnees(df):
     # Sauvegarde d'une copie des adresses actuelles
     adresses_actuelles = df_visible["Adresse"].copy() if "Adresse" in df_visible.columns else pd.Series([])
 
-    # Ajouter une colonne de checkbox pour les emails
+    # Ajouter une colonne de checkbox pour les PDF
     if "Lien" in df.columns:
-        # Créer une colonne Afficher Email
+        # Créer une colonne Afficher PDF
         df_visible = df_visible.copy()  # Éviter SettingWithCopyWarning
-        df_visible["Afficher Email"] = False
+        df_visible["Afficher PDF"] = False
 
-        # Si un email est ouvert, cocher la case correspondante
-        if st.session_state.email_a_ouvrir is not None and st.session_state.previous_checked_idx is not None:
+        # Si un PDF est ouvert, cocher la case correspondante
+        if st.session_state.pdf_a_ouvrir is not None and st.session_state.previous_checked_idx is not None:
             if st.session_state.previous_checked_idx in df_visible.index:
-                df_visible.loc[st.session_state.previous_checked_idx, "Afficher Email"] = True
+                df_visible.loc[st.session_state.previous_checked_idx, "Afficher PDF"] = True
 
-        # Réorganiser les colonnes pour avoir Afficher Email en premier et Lien en dernier
+        # Réorganiser les colonnes pour avoir Afficher PDF en premier et Lien en dernier
         cols = list(df_visible.columns)
-        # Retirer Afficher Email et Lien des colonnes (s'ils existent)
-        if "Afficher Email" in cols:
-            cols.remove("Afficher Email")
+        # Retirer Afficher PDF et Lien des colonnes (s'ils existent)
+        if "Afficher PDF" in cols:
+            cols.remove("Afficher PDF")
         if "Lien" in cols:
             cols.remove("Lien")
 
         # Recréer la liste des colonnes dans le bon ordre
-        new_cols = ["Afficher Email"] + cols
+        new_cols = ["Afficher PDF"] + cols
         if "Lien" in df_visible.columns:
             new_cols = new_cols + ["Lien"]
 
@@ -332,7 +332,7 @@ def creer_editeur_donnees(df):
 
     # Configuration des colonnes pour l'éditeur
     column_config = {
-        "Afficher Email": st.column_config.CheckboxColumn("📧", help="Cocher pour afficher l'email"),
+        "Afficher PDF": st.column_config.CheckboxColumn("📄", help="Cocher pour afficher le PDF"),
         "Adresse": st.column_config.TextColumn("Adresse", width="large"),
         "Ville": st.column_config.TextColumn("Ville", width="medium"),
         "Nom": st.column_config.TextColumn("Hébergement", width="medium"),
@@ -352,47 +352,47 @@ def creer_editeur_donnees(df):
     )
 
     # Traiter les changements de checkbox
-    if "Lien" in df.columns and "Afficher Email" in edited_df.columns:
+    if "Lien" in df.columns and "Afficher PDF" in edited_df.columns:
         # Identifier les lignes avec checkbox cochée
-        email_checked_rows = edited_df[edited_df["Afficher Email"] == True]
+        pdf_checked_rows = edited_df[edited_df["Afficher PDF"] == True]
 
         # Si une nouvelle checkbox est cochée
-        if not email_checked_rows.empty:
-            checked_row_idx = email_checked_rows.index[0]
+        if not pdf_checked_rows.empty:
+            checked_row_idx = pdf_checked_rows.index[0]
 
-            # Si c'est une nouvelle ligne cochée ou si aucun email n'est actuellement ouvert
-            if checked_row_idx != st.session_state.previous_checked_idx or st.session_state.email_a_ouvrir is None:
-                # Récupérer le lien d'email correspondant
+            # Si c'est une nouvelle ligne cochée ou si aucun PDF n'est actuellement ouvert
+            if checked_row_idx != st.session_state.previous_checked_idx or st.session_state.pdf_a_ouvrir is None:
+                # Récupérer le lien de PDF correspondant
                 if checked_row_idx in df.index and pd.notna(df.loc[checked_row_idx, "Lien"]):
-                    st.session_state.email_a_ouvrir = df.loc[checked_row_idx, "Lien"]
+                    st.session_state.pdf_a_ouvrir = df.loc[checked_row_idx, "Lien"]
                     st.session_state.previous_checked_idx = checked_row_idx
-                    st.rerun()  # Recharger la page pour afficher l'email
+                    st.rerun()  # Recharger la page pour afficher le PDF
 
             # Décocher toutes les autres checkboxes
             for idx in edited_df.index:
-                if idx != checked_row_idx and edited_df.loc[idx, "Afficher Email"]:
-                    edited_df.loc[idx, "Afficher Email"] = False
+                if idx != checked_row_idx and edited_df.loc[idx, "Afficher PDF"]:
+                    edited_df.loc[idx, "Afficher PDF"] = False
 
-        # Si toutes les checkboxes sont décochées mais qu'un email est ouvert
-        elif email_checked_rows.empty and st.session_state.email_a_ouvrir is not None:
-            # Si l'utilisateur a décoché la case, fermer l'email
-            st.session_state.email_a_ouvrir = None
+        # Si toutes les checkboxes sont décochées mais qu'un PDF est ouvert
+        elif pdf_checked_rows.empty and st.session_state.pdf_a_ouvrir is not None:
+            # Si l'utilisateur a décoché la case, fermer le PDF
+            st.session_state.pdf_a_ouvrir = None
             st.session_state.previous_checked_idx = None
-            st.rerun()  # Recharger la page pour fermer l'email
+            st.rerun()  # Recharger la page pour fermer le PDF
 
-    # Afficher l'email sélectionné
-    if st.session_state.email_a_ouvrir:
-        with st.expander("📧 Email de confirmation", expanded=True):
-            # Appeler ouvrir_email avec use_expander=False pour éviter l'imbrication d'expanders
-            ouvrir_email(st.session_state.email_a_ouvrir, use_expander=False)
-            if st.button("Fermer l'email"):
-                # Fermer l'email et décocher la case
-                st.session_state.email_a_ouvrir = None
+    # Afficher le PDF sélectionné
+    if st.session_state.pdf_a_ouvrir:
+        with st.expander("📄 Document PDF", expanded=True):
+            # Appeler ouvrir_pdf avec use_expander=False pour éviter l'imbrication d'expanders
+            ouvrir_pdf(st.session_state.pdf_a_ouvrir, use_expander=False)
+            if st.button("Fermer le PDF"):
+                # Fermer le PDF et décocher la case
+                st.session_state.pdf_a_ouvrir = None
                 st.session_state.previous_checked_idx = None
                 # Cette ligne ne suffit pas car edited_df ne persiste pas après st.rerun()
                 # C'est pourquoi nous utilisons previous_checked_idx pour suivre l'état
-                if "Afficher Email" in edited_df.columns:
-                    edited_df["Afficher Email"] = False
+                if "Afficher PDF" in edited_df.columns:
+                    edited_df["Afficher PDF"] = False
                 st.rerun()
 
     return edited_df, df_visible, adresses_actuelles
@@ -481,13 +481,14 @@ def main():
         m = creer_carte(df, df_avec_duree, distances)
         st_folium(m, width=None, height=700)
 
-        afficher_emails_selectbox(df)
+        # Remplacer la fonction d'affichage d'emails par celle pour les PDF
+        afficher_pdfs_selectbox(df)
 
     with tab2:
         # Afficher le récapitulatif dans la sidebar (seulement dans l'onglet carte)
         afficher_recapitulatif_metrics(df)
 
-        # Créer l'éditeur de données (qui gère aussi les emails)
+        # Créer l'éditeur de données (qui gère aussi les PDF)
         edited_df, df_visible, adresses_actuelles = creer_editeur_donnees(df)
 
         # Bouton pour appliquer les modifications

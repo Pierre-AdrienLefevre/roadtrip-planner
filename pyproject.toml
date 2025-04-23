@@ -1,6 +1,6 @@
 [project]
 name = "road-trip"
-version = "1.1"
+version = "1.2"
 description = "Road Trip Planner"
 readme = "README.md"
 requires-python = "~=3.12"
@@ -12,5 +12,5 @@ dependencies = [
     "pygithub~=2.6",
     "requests~=2.32",
     "streamlit~=1.44",
-    "streamlit-folium~=0.24",
+    "streamlit-folium~=0.25",
 ]
