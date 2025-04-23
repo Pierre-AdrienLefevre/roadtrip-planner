@@ -1,5 +1,5 @@
 [project]
-name = "road-trip"
+name = "road-trip-planner"
 version = "1.2"
 description = "Road Trip Planner"
 readme = "README.md"
