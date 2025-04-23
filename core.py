@@ -7,7 +7,7 @@ import json
 import base64
 from github import Github, GithubException
 from io import BytesIO
-
+from streamlit_pdf_viewer import pdf_viewer
 
 @st.cache_data
 def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"):
@@ -183,11 +183,11 @@ def add_lat_lon(df, address_column="Adresse"):
 
 
 def get_osrm_route(lat1, lon1, lat2, lon2):
-    """Interroge OSRM pour obtenir le tracé et la distance entre deux points."""
+    """Interroge OSRM pour obtenir le tracé, la distance et la durée entre deux points."""
     # Vérifier que les coordonnées sont valides
     if None in (lat1, lon1, lat2, lon2):
         print("Coordonnées invalides, impossible de calculer l'itinéraire.")
-        return None, None
+        return None, None, None
 
     url = (
         f"http://router.project-osrm.org/route/v1/driving/"
@@ -200,13 +200,15 @@ def get_osrm_route(lat1, lon1, lat2, lon2):
         if data.get("routes"):
             route = data["routes"][0]
             distance_km = route["distance"] / 1000  # Conversion en km
+            duration_hours = route["duration"] / 3600  # Conversion en heures
+            duration_hours = duration_hours * 0.75
             route_coords = polyline.decode(route["geometry"])  # Liste de (lat, lon)
-            return distance_km, json.dumps(route_coords)  # Sauvegarde en JSON
-    return None, None
+            return distance_km, duration_hours, json.dumps(route_coords)  # Sauvegarde en JSON
+    return None, None, None
 
 
 def calculate_routes_osrm(df):
-    """Calcule les distances et les trajets avec OSRM si non enregistrés."""
+    """Calcule les distances, durées et les trajets avec OSRM si non enregistrés."""
     # Créer une copie du DataFrame pour éviter de modifier l'original
     df = df.copy()
 
@@ -219,6 +221,8 @@ def calculate_routes_osrm(df):
         df["Chemin"] = None
     if "Distance (km)" not in df.columns:
         df["Distance (km)"] = None
+    if "Durée (h)" not in df.columns:
+        df["Durée (h)"] = None
 
     # Vérifier s'il y a des coordonnées manquantes et les ajouter
     missing_coords = df[df["Latitude"].isna() | df["Longitude"].isna()].index
@@ -234,6 +238,7 @@ def calculate_routes_osrm(df):
 
     # Initialiser les listes pour stocker les résultats
     distances = []
+    durations = []
     route_geoms = []
 
     # Calculer les itinéraires pour chaque segment
@@ -251,20 +256,28 @@ def calculate_routes_osrm(df):
                 if isinstance(route_coords, str):
                     route_coords = json.loads(route_coords)
                 distance = df.iloc[i]["Distance (km)"]
+                duration = df.iloc[i]["Durée (h)"] if "Durée (h)" in df.columns and pd.notna(
+                    df.iloc[i]["Durée (h)"]) else None
+
+                # Si la durée n'est pas disponible, on recalcule tout
+                if duration is None:
+                    distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
             except Exception as e:
                 st.warning(f"Erreur lors de la lecture du chemin à l'index {i}: {e}")
-                distance, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
+                distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
         # Sinon, on calcule un nouveau tracé si les coordonnées sont valides
         elif valid_coords:
-            distance, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
+            distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
         # Si les coordonnées sont invalides, on ne peut pas calculer de tracé
         else:
             st.warning(f"Coordonnées manquantes pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire.")
             distance = None
+            duration = None
             route_coords = json.dumps([])
 
         # Mettre à jour le DataFrame directement
         df.at[i, "Distance (km)"] = distance
+        df.at[i, "Durée (h)"] = duration
 
         # S'assurer que route_coords est au format JSON
         if isinstance(route_coords, list):
@@ -273,13 +286,15 @@ def calculate_routes_osrm(df):
 
         # Stocker pour retour de fonction
         distances.append(distance)
+        durations.append(duration)
         route_geoms.append(route_coords)
 
     # Ajouter une dernière valeur pour correspondre à la taille du DataFrame
     distances.append(None)
+    durations.append(None)
     route_geoms.append(json.dumps([]))
 
-    return distances, route_geoms, df
+    return distances, durations, route_geoms, df
 
 
 def identifier_sejours_multiples(df):
@@ -332,53 +347,33 @@ def identifier_sejours_multiples(df):
     return df_avec_duree
 
 
-def ouvrir_pdf(chemin_pdf, use_expander=False):
+def ouvrir_pdf(chemin_pdf, use_expander = False):
+
     """
-    Version minimale pour afficher un PDF dans Streamlit
+    Affiche un PDF en utilisant streamlit-pdf-viewer
 
     Args:
-        chemin_pdf: Chemin du fichier PDF à charger
-        use_expander: Utiliser un expander pour afficher le PDF
+        chemin_pdf: Chemin du fichier PDF dans le dépôt GitHub
     """
-    try:
-        import os
+    import os
 
-        # Charger le fichier PDF depuis GitHub
-        contenu_pdf = charger_donnees(nom_fichier=chemin_pdf, format="binary")
+    # Charger le fichier PDF depuis GitHub en utilisant votre fonction existante
+    contenu_pdf = charger_donnees(nom_fichier=chemin_pdf, format="binary")
 
-        if not contenu_pdf:
-            st.error("Impossible de charger le fichier PDF.")
-            return
+    if not contenu_pdf:
+        st.error(f"Impossible de charger le fichier PDF: {chemin_pdf}")
+        return
 
-        # Extraire le nom du fichier du chemin
-        nom_fichier = os.path.basename(chemin_pdf)
+    # Récupérer les données binaires du PDF
+    if hasattr(contenu_pdf, 'read'):
+        contenu_pdf.seek(0)
+        pdf_data = contenu_pdf.read()
+    else:
+        pdf_data = contenu_pdf
 
-        # Préparer les données binaires
-        if hasattr(contenu_pdf, 'read'):
-            contenu_pdf.seek(0)
-            pdf_data = contenu_pdf.read()
-        else:
-            pdf_data = contenu_pdf
-
-        # Fonction pour l'affichage du contenu
-        def afficher_contenu():
-            # Titre et bouton de téléchargement
-            st.subheader(f"📄 {nom_fichier}")
-
-            # Solution de repli simple avec iframe
-            import base64
-            b64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="1000" type="application/pdf"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
-
-        # Afficher avec ou sans expander
-        if use_expander:
-            with st.expander(f"Document: {nom_fichier}", expanded=True):
-                afficher_contenu()
-        else:
-            afficher_contenu()
-
-    except Exception as e:
-        st.error(f"Erreur lors de l'ouverture du PDF: {e}")
-        import traceback
-        st.error(traceback.format_exc())
+    # Afficher le PDF avec streamlit-pdf-viewer
+    pdf_viewer(
+        input=pdf_data,  # Données binaires du PDF
+        width="100%",    # Utiliser toute la largeur disponible
+        render_text=True, # Activer la sélection de texte
+    )

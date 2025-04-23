@@ -44,7 +44,7 @@ def creer_icones():
     return icons
 
 
-def creer_carte(df, df_avec_duree, distances=None):
+def creer_carte(df, df_avec_duree, distances=None, durations=None):
     """Crée et configure la carte Folium avec les routes et marqueurs"""
     start_lat = df.iloc[0]["Latitude"]
     start_lon = df.iloc[0]["Longitude"]
@@ -78,12 +78,30 @@ def creer_carte(df, df_avec_duree, distances=None):
         if pd.notna(df.iloc[i]["Chemin"]):
             route_coords = json.loads(df.iloc[i]["Chemin"])
             if route_coords:
-                # Calculer la distance (limitée à 2 décimales)
+                # Calculer la distance et la durée
                 distance_text = ""
+                duration_text = ""
                 if "Distance (km)" in df.columns and pd.notna(df.iloc[i]["Distance (km)"]):
                     distance_text = f"{df.iloc[i]['Distance (km)']:.2f} km"
                 elif distances is not None and i < len(distances) and pd.notna(distances[i]):
                     distance_text = f"{(distances[i] / 1000):.2f} km"
+
+                if "Durée (h)" in df.columns and pd.notna(df.iloc[i]["Durée (h)"]):
+                    # Convertir la durée en heures:minutes
+                    duree_heures = df.iloc[i]["Durée (h)"]
+                    heures = int(duree_heures)
+                    minutes = int((duree_heures - heures) * 60)
+                    duration_text = f"{heures}h{minutes:02d}"
+                elif durations is not None and i < len(durations) and pd.notna(durations[i]):
+                    duree_heures = durations[i]
+                    heures = int(duree_heures)
+                    minutes = int((duree_heures - heures) * 60)
+                    duration_text = f"{heures}h{minutes:02d}"
+
+                # Tracer la route avec distance et durée
+                tooltip = f"Distance: {distance_text}"
+                if duration_text:
+                    tooltip += f" - Durée: {duration_text}"
 
                 # Tracer la route
                 route = folium.PolyLine(
@@ -91,7 +109,7 @@ def creer_carte(df, df_avec_duree, distances=None):
                     color="#4169E1",  # Bleu royal
                     weight=4,
                     opacity=0.8,
-                    tooltip=f"Distance: {distance_text}"
+                    tooltip=tooltip
                 )
                 route.add_to(m)
 
@@ -264,11 +282,12 @@ def afficher_pdfs_selectbox(df):
     else:
         st.info("Aucun hébergement avec document PDF disponible.")
 
-def afficher_recapitulatif_metrics(df, distance_totale=None):
-    """Affiche le récapitulatif du budget et de la distance en utilisant st.metrics"""
 
-    # Créer une ligne avec deux colonnes pour les métriques
-    col1, col2 = st.columns(2)
+def afficher_recapitulatif_metrics(df, distance_totale=None, duree_totale=None):
+    """Affiche le récapitulatif du budget, de la distance et de la durée en utilisant st.metrics"""
+
+    # Créer une ligne avec trois colonnes pour les métriques
+    col1, col2, col3 = st.columns(3)
 
     # Afficher le budget total dans la première colonne
     total_budget = df["Prix"].sum(skipna=True)
@@ -287,6 +306,20 @@ def afficher_recapitulatif_metrics(df, distance_totale=None):
             value=f"{distance_totale:.2f} km"
         )
 
+    # Afficher la durée totale dans la troisième colonne
+    if duree_totale is None and "Durée (h)" in df.columns:
+        duree_totale = df["Durée (h)"].sum(skipna=True)
+
+    if duree_totale is not None:
+        # Convertir en heures et minutes
+        heures = int(duree_totale)
+        minutes = int((duree_totale - heures) * 60)
+        with col3:
+            st.metric(
+                label="⏱️ Temps total de conduite",
+                value=f"{heures}h{minutes:02d}"
+            )
+
 
 def creer_editeur_donnees(df):
     """Crée un éditeur de données pour modifier les informations du roadtrip"""
@@ -297,7 +330,7 @@ def creer_editeur_donnees(df):
         st.session_state.previous_checked_idx = None
 
     # Définir les colonnes à cacher
-    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type', 'Distance (km)']
+    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type', 'Distance (km)', 'Durée (h)']
     df_visible = df.drop(columns=colonnes_cachees, errors="ignore")
 
     # Sauvegarde d'une copie des adresses actuelles
@@ -469,7 +502,7 @@ def main():
 
     with tab1:
         # Calculer les distances et les trajets
-        distances, routes, df = calculate_routes_osrm(df)
+        distances,durations, routes, df = calculate_routes_osrm(df)
 
         # Identifier les séjours multiples
         df_avec_duree = identifier_sejours_multiples(df)
@@ -478,7 +511,7 @@ def main():
         afficher_recapitulatif_metrics(df)
 
         # Créer et afficher la carte
-        m = creer_carte(df, df_avec_duree, distances)
+        m = creer_carte(df, df_avec_duree, distances, durations)
         st_folium(m, width=None, height=700)
 
         # Remplacer la fonction d'affichage d'emails par celle pour les PDF

@@ -13,4 +13,5 @@ dependencies = [
     "requests~=2.32",
     "streamlit~=1.44",
     "streamlit-folium~=0.25",
+    "streamlit-pdf-viewer>=0.0.22",
 ]
