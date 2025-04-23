@@ -14,6 +14,6 @@ debug.py
 
 hebergements_chemins.parquet copie
 Planification budget.xlsx
-
+uv.lock
 cache
 .streamlit
