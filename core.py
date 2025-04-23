@@ -7,7 +7,7 @@ import json
 import base64
 from github import Github, GithubException
 from io import BytesIO
-
+from streamlit_pdf_viewer import pdf_viewer
 
 @st.cache_data
 def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"):
@@ -332,77 +332,33 @@ def identifier_sejours_multiples(df):
     return df_avec_duree
 
 
-def ouvrir_pdf(chemin_pdf, use_expander=False):
+def ouvrir_pdf(chemin_pdf, use_expander = False):
+
     """
-    Version améliorée pour afficher un PDF dans Streamlit Cloud
+    Affiche un PDF en utilisant streamlit-pdf-viewer
 
     Args:
-        chemin_pdf: Chemin du fichier PDF à charger
-        use_expander: Utiliser un expander pour afficher le PDF
+        chemin_pdf: Chemin du fichier PDF dans le dépôt GitHub
     """
-    try:
-        import os
-        import base64
-        from streamlit.components.v1 import html
+    import os
 
-        # Charger le fichier PDF depuis GitHub
-        contenu_pdf = charger_donnees(nom_fichier=chemin_pdf, format="binary")
+    # Charger le fichier PDF depuis GitHub en utilisant votre fonction existante
+    contenu_pdf = charger_donnees(nom_fichier=chemin_pdf, format="binary")
 
-        if not contenu_pdf:
-            st.error("Impossible de charger le fichier PDF.")
-            return
+    if not contenu_pdf:
+        st.error(f"Impossible de charger le fichier PDF: {chemin_pdf}")
+        return
 
-        # Extraire le nom du fichier du chemin
-        nom_fichier = os.path.basename(chemin_pdf)
+    # Récupérer les données binaires du PDF
+    if hasattr(contenu_pdf, 'read'):
+        contenu_pdf.seek(0)
+        pdf_data = contenu_pdf.read()
+    else:
+        pdf_data = contenu_pdf
 
-        # Préparer les données binaires
-        if hasattr(contenu_pdf, 'read'):
-            contenu_pdf.seek(0)
-            pdf_data = contenu_pdf.read()
-        else:
-            pdf_data = contenu_pdf
-
-        # Fonction pour l'affichage du contenu
-        def afficher_contenu():
-            # Titre et bouton de téléchargement
-            st.subheader(f"📄 {nom_fichier}")
-
-            # Bouton de téléchargement
-            st.download_button(
-                label="⬇️ Télécharger le PDF",
-                data=pdf_data,
-                file_name=nom_fichier,
-                mime="application/pdf"
-            )
-
-            # Utiliser st.components.v1.html pour afficher le PDF de manière plus sécurisée
-            b64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-
-            # Créer le HTML avec PDF.js pour un affichage plus compatible
-            pdf_display = f"""
-            <div style="width:100%; height:800px;">
-                <object
-                    data="data:application/pdf;base64,{b64_pdf}"
-                    type="application/pdf"
-                    width="100%"
-                    height="100%">
-                    <p>Le navigateur ne peut pas afficher le PDF. 
-                    <a href="data:application/pdf;base64,{b64_pdf}" download="{nom_fichier}">
-                    Télécharger le PDF</a> à la place.</p>
-                </object>
-            </div>
-            """
-
-            html(pdf_display, height=800)
-
-        # Afficher avec ou sans expander
-        if use_expander:
-            with st.expander(f"Document: {nom_fichier}", expanded=True):
-                afficher_contenu()
-        else:
-            afficher_contenu()
-
-    except Exception as e:
-        st.error(f"Erreur lors de l'ouverture du PDF: {e}")
-        import traceback
-        st.error(traceback.format_exc())
+    # Afficher le PDF avec streamlit-pdf-viewer
+    pdf_viewer(
+        input=pdf_data,  # Données binaires du PDF
+        width="100%",    # Utiliser toute la largeur disponible
+        render_text=True, # Activer la sélection de texte
+    )
