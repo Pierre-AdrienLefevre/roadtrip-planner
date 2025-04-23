@@ -216,14 +216,14 @@ def creer_carte(df, df_avec_duree, distances=None, durations=None):
 
 def afficher_pdfs_selectbox(df):
     """
-    Affiche une liste déroulante pour sélectionner un hébergement et voir son PDF
+    Affiche une liste déroulante pour sélectionner un hébergement et voir son PDF automatiquement
 
     Args:
         df: DataFrame contenant les données des hébergements avec les liens de PDF
     """
-    # Utiliser des variables d'état de session distinctes pour éviter les conflits
-    if "carte_pdf_a_ouvrir" not in st.session_state:
-        st.session_state.carte_pdf_a_ouvrir = None
+    # Initialiser les variables d'état de session
+    if "carte_pdf_selectbox" not in st.session_state:
+        st.session_state.carte_pdf_selectbox = None
 
     # Filtrer pour ne garder que les lignes avec des liens PDF valides
     df_with_pdfs = df[pd.notna(df["Lien"]) & (df["Lien"] != "")].copy()
@@ -248,36 +248,26 @@ def afficher_pdfs_selectbox(df):
         st.markdown("---")
         st.subheader("📄 Documents PDF")
 
-        # Créer la liste déroulante et le bouton
-        col1, col2 = st.columns([3, 1])
+        # Sélection de l'hébergement avec st.selectbox
+        selected_option = st.selectbox(
+            "Sélectionner un hébergement pour voir son document PDF:",
+            options,
+            index=None,
+            placeholder="Choisir un hébergement...",
+            key="carte_pdf_selectbox"  # Cette clé permettra de suivre la sélection
+        )
 
-        with col1:
-            selected_option = st.selectbox(
-                "Sélectionner un hébergement pour voir son document PDF:",
-                options,
-                index=None,
-                placeholder="Choisir un hébergement...",
-                key="carte_pdf_selectbox"  # Clé unique pour éviter les conflits
-            )
-
-        with col2:
-            st.write("")  # Pour aligner le bouton avec la liste déroulante
-            st.write("")
-            if selected_option:
-                # Utiliser une clé unique pour le bouton
-                if st.button("📄 Voir le PDF", type="primary", key="carte_pdf_button"):
-                    st.session_state.carte_pdf_a_ouvrir = pdf_links[selected_option]
-                    st.rerun()  # Recharger la page pour afficher le PDF
-
-        # Afficher le PDF sélectionné (seulement si un PDF a été sélectionné depuis cette interface)
-        if st.session_state.carte_pdf_a_ouvrir:
+        # Si une option est sélectionnée, afficher immédiatement le PDF
+        if selected_option:
+            pdf_link = pdf_links[selected_option]
             with st.expander("Document PDF", expanded=True):
                 # Appeler ouvrir_pdf avec use_expander=False pour éviter l'imbrication d'expanders
-                ouvrir_pdf(st.session_state.carte_pdf_a_ouvrir, use_expander=False)
-                # Utiliser une clé unique pour le bouton
+                ouvrir_pdf(pdf_link, use_expander=False)
+
+                # Ajouter un bouton pour fermer le PDF si nécessaire
                 if st.button("Fermer le PDF", key="carte_pdf_close_button"):
-                    # Fermer le PDF
-                    st.session_state.carte_pdf_a_ouvrir = None
+                    # Réinitialiser la sélection
+                    st.session_state.carte_pdf_selectbox = None
                     st.rerun()
     else:
         st.info("Aucun hébergement avec document PDF disponible.")
