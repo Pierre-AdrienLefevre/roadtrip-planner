@@ -33,15 +33,46 @@ def formater_date_sejour(row):
 
 def creer_icones():
     """Crée et retourne les icônes pour les différents types de points sur la carte"""
+    # Icônes de base
     icons = {
-        "etape": folium.Icon(color="blue", icon="bed", prefix="fa"),
         "depart": folium.Icon(color="red", icon="play", prefix="fa"),
         "arrivee": folium.Icon(color="green", icon="flag-checkered", prefix="fa"),
-        "sejour": folium.Icon(color="purple", icon="home", prefix="fa"),
-        "camping": folium.Icon(color="orange", icon="campground", prefix="fa")  # Ajout de l'icône camping
     }
 
-    return icons
+    # Icônes pour les types d'hébergement avec couleurs selon le nombre de nuits
+    # Pour 1 nuit
+    icons["hotel_1"] = folium.Icon(color="lightblue", icon="bed", prefix="fa")
+    icons["camping_1"] = folium.Icon(color="lightblue", icon="campground", prefix="fa")
+
+    # Pour 2 nuits
+    icons["hotel_2"] = folium.Icon(color="blue", icon="bed", prefix="fa")
+    icons["camping_2"] = folium.Icon(color="blue", icon="campground", prefix="fa")
+
+    # Pour 3 nuits
+    icons["hotel_3"] = folium.Icon(color="cadetblue", icon="bed", prefix="fa")
+    icons["camping_3"] = folium.Icon(color="cadetblue", icon="campground", prefix="fa")
+
+    # Pour 4 nuits ou plus
+    icons["hotel_4"] = folium.Icon(color="darkblue", icon="bed", prefix="fa")
+    icons["camping_4"] = folium.Icon(color="darkblue", icon="campground", prefix="fa")
+
+    # Pour les cas non spécifiés (durée par défaut = 1)
+    icons["sejour_1"] = folium.Icon(color="lightblue", icon="bed", prefix="fa")
+    icons["sejour_2"] = folium.Icon(color="blue", icon="bed", prefix="fa")
+    icons["sejour_3"] = folium.Icon(color="cadetblue", icon="bed", prefix="fa")
+    icons["sejour_4"] = folium.Icon(color="darkblue", icon="bed", prefix="fa")
+
+    # Couleurs pour les popups selon le nombre de nuits (une couleur par durée)
+    colors = {
+        "départ": "#DC143C",  # Rouge
+        "arrivée": "#228B22",  # Vert
+        "séjour_1": "#87CEFA",  # Bleu clair (1 nuit)
+        "séjour_2": "#1E90FF",  # Bleu (2 nuits)
+        "séjour_3": "#4682B4",  # Bleu acier (3 nuits)
+        "séjour_4": "#0000CD",  # Bleu foncé (4 nuits)
+    }
+
+    return icons, colors
 
 
 def creer_carte(df, df_avec_duree, distances=None, durations=None):
@@ -64,7 +95,6 @@ def creer_carte(df, df_avec_duree, distances=None, durations=None):
         name="Satellite",
         attr='Esri',
     ).add_to(m)
-
 
     # Ajouter la couche de carte normale
     folium.TileLayer(
@@ -114,16 +144,7 @@ def creer_carte(df, df_avec_duree, distances=None, durations=None):
                 route.add_to(m)
 
     # Obtenir les icônes
-    icons = creer_icones()
-
-    # Couleurs pour les popups
-    colors = {
-        "départ": "#DC143C",  # Rouge
-        "arrivée": "#228B22",  # Vert
-        "séjour": "#800080",  # Violet
-        "étape": "#1E90FF",  # Bleu
-        "camping": "#FF8C00"  # Orange pour le camping
-    }
+    icons, colors = creer_icones()
 
     # Parcourir le DataFrame traité pour afficher les marqueurs
     for i, row in df_avec_duree.iterrows():
@@ -131,40 +152,55 @@ def creer_carte(df, df_avec_duree, distances=None, durations=None):
         if row["Duree_Sejour"] == -1:
             continue
 
+        # Déterminer le type d'hébergement et le nombre de nuits
+        duree_sejour = row["Duree_Sejour"] if "Duree_Sejour" in row and pd.notna(row["Duree_Sejour"]) else 0
+        type_hebergement = row["Type_Hebergement"].lower() if "Type_Hebergement" in row and pd.notna(
+            row["Type_Hebergement"]) else ""
+
         # Déterminer le type de point
         if i == 0:
             point_type = "départ"
             icon = icons["depart"]
             title = "Point de départ"
-        elif i == len(df) - 1 or row["Adresse"] == df.iloc[-1]["Adresse"]:
+            color = colors["départ"]
+        elif i == len(df) - 1 or (row["Adresse"] == df.iloc[-1]["Adresse"] if "Adresse" in row else False):
             point_type = "arrivée"
             icon = icons["arrivee"]
             title = "Point d'arrivée"
-        elif type_heb_lower := (row["Type"].lower() if "Type" in row and pd.notna(row["Type"]) else ""):
-            # Vérifier si c'est un camping
-            if "camping" in type_heb_lower or "camp" in type_heb_lower:
-                point_type = "camping"
-                icon = icons["camping"]
-                title = f"Camping ({row['Duree_Sejour']} nuits)"
-            elif row["Duree_Sejour"] > 1:
-                point_type = "séjour"
-                icon = icons["sejour"]
-                title = f"Séjour de {row['Duree_Sejour']} nuits"
-            else:
-                point_type = "étape"
-                icon = icons["camping"]
-                title = f"Étape {i}"
+            color = colors["arrivée"]
         else:
-            if row["Duree_Sejour"] > 1:
-                point_type = "séjour"
-                icon = icons["sejour"]
-                title = f"Séjour de {row['Duree_Sejour']} nuits"
+            # Déterminer la catégorie de séjour en fonction de la durée
+            if duree_sejour == 1:
+                sejour_category = "1"
+                point_type = "séjour_1"
+            elif duree_sejour == 2:
+                sejour_category = "2"
+                point_type = "séjour_2"
+            elif duree_sejour == 3:
+                sejour_category = "3"
+                point_type = "séjour_3"
+            elif duree_sejour >= 4:
+                sejour_category = "4"
+                point_type = "séjour_4"
             else:
-                point_type = "étape"
-                icon = icons["camping"]
-                title = f"Étape {i}"
+                # Valeur par défaut si la durée n'est pas spécifiée
+                sejour_category = "1"
+                point_type = "séjour_1"
 
-        color = colors[point_type]
+            # Déterminer l'icône en fonction du type d'hébergement ET de la durée
+            if "hôtel" in type_hebergement:
+                icon = icons[f"hotel_{sejour_category}"]
+                title = f"Hôtel ({duree_sejour} nuits)"
+            elif "camping" in type_hebergement:
+                icon = icons[f"camping_{sejour_category}"]
+                title = f"Camping ({duree_sejour} nuits)"
+            else:
+                # Type d'hébergement non spécifié, on utilise l'icône de séjour générique
+                icon = icons[f"sejour_{sejour_category}"]
+                title = f"Séjour de {duree_sejour} nuits"
+
+            # La couleur est déterminée uniquement par la durée du séjour
+            color = colors[point_type]
 
         # Récupérer les informations
         date_info = formater_date_sejour(row)
@@ -190,12 +226,12 @@ def creer_carte(df, df_avec_duree, distances=None, durations=None):
             tooltip_text = f"Départ: {ville} ({date_info})"
         elif point_type == "arrivée":
             tooltip_text = f"Arrivée: {ville} ({date_info})"
-        elif point_type == "camping":
+        elif "camping" in type_hebergement:
             tooltip_text = f"{ville} - Camping ({date_info})"
-        elif point_type == "séjour":
-            tooltip_text = f"{ville} - Séjour de {row['Duree_Sejour']} nuits ({date_info})"
+        elif "hôtel" in type_hebergement:
+            tooltip_text = f"{ville} - Hôtel ({date_info})"
         else:
-            tooltip_text = f"{ville} ({date_info})"
+            tooltip_text = f"{ville} - Séjour de {duree_sejour} nuits ({date_info})"
 
         # Ajouter le marqueur
         folium.Marker(
@@ -320,7 +356,7 @@ def creer_editeur_donnees(df):
         st.session_state.previous_checked_idx = None
 
     # Définir les colonnes à cacher
-    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type', 'Distance (km)', 'Durée (h)']
+    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Distance (km)', 'Durée (h)', 'Lien']
     df_visible = df.drop(columns=colonnes_cachees, errors="ignore")
 
     # Sauvegarde d'une copie des adresses actuelles
@@ -367,11 +403,11 @@ def creer_editeur_donnees(df):
     # Édition interactive du tableau
     edited_df = st.data_editor(
         df_visible,
-        num_rows="fixed",
+        num_rows="dynamic",
         use_container_width=True,
         height=600,
         hide_index=True,
-        column_config=column_config
+        column_config=column_config,
     )
 
     # Traiter les changements de checkbox
@@ -457,7 +493,7 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
         # Recalculer les routes et distances pour tout le DataFrame
         # Cela permettra de recalculer automatiquement les coordonnées manquantes
         with st.spinner("Recalcul des itinéraires et des distances..."):
-            distances_list, route_geoms, df_updated = calculate_routes_osrm(df)
+            distances_list,durations, route_geoms, df_updated = calculate_routes_osrm(df)
 
             # Mettre à jour le DataFrame avec les résultats recalculés
             df = df_updated
