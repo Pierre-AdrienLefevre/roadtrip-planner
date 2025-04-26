@@ -1,6 +1,4 @@
 from opencage.geocoder import OpenCageGeocode
-import polyline
-import requests
 import streamlit as st
 import pandas as pd
 import json
@@ -182,47 +180,108 @@ def add_lat_lon(df, address_column="Adresse"):
     return df
 
 
-def get_osrm_route(lat1, lon1, lat2, lon2):
-    """Interroge OSRM pour obtenir le tracé, la distance et la durée entre deux points."""
+def get_graphhopper_route(start_coords, end_coords, type_deplacement="Marche"):
+    """
+    Calcule un itinéraire en utilisant l'API GraphHopper.
+
+    Args:
+        start_coords: Tuple (latitude, longitude) du point de départ
+        end_coords: Tuple (latitude, longitude) du point d'arrivée
+        type_deplacement: Type de déplacement ('Marche' ou 'Voiture')
+
+    Returns:
+        Un tuple (distance_km, duration_hours, coords_json) ou (None, None, None) en cas d'erreur
+    """
+    import requests
+    import json
+
     # Vérifier que les coordonnées sont valides
-    if None in (lat1, lon1, lat2, lon2):
+    if None in (start_coords[0], start_coords[1], end_coords[0], end_coords[1]):
         print("Coordonnées invalides, impossible de calculer l'itinéraire.")
         return None, None, None
 
-    url = (
-        f"http://router.project-osrm.org/route/v1/driving/"
-        f"{lon1},{lat1};{lon2},{lat2}"
-        "?overview=full&geometries=polyline"
-    )
-    response = requests.get(url)
-    if response.status_code == 200:
+    # Déterminer le profil GraphHopper en fonction du type de déplacement
+    if not isinstance(type_deplacement, str):
+        print(f"Type de déplacement invalide: {type_deplacement} (type: {type(type_deplacement)})")
+        return None, None, None
+
+    if type_deplacement == "Marche":
+        profile = "foot"  # Utiliser "foot" au lieu de "hike" car "hike" n'est pas standard
+    elif type_deplacement == "Voiture":
+        profile = "car"
+    else:
+        print(f"Type de déplacement non reconnu: {type_deplacement}")
+        return None, None, None
+
+    # Ta clé API GraphHopper
+    api_key = "ce1e4fa9-d549-4199-8876-c2a59f0735bc"
+
+    # Construire l'URL de l'API GraphHopper
+    base_url = "https://graphhopper.com/api/1/route"
+
+    # Formatage correct des paramètres selon la documentation
+    params = {
+        "key": api_key,
+        "profile": profile,  # Utiliser "profile" au lieu de "vehicle"
+        "points_encoded": "false",
+        "instructions": "false",
+        "calc_points": "true",
+        "locale": "fr"
+    }
+
+    # Ajouter les points de manière correcte (séparément pour chaque point)
+    params["point"] = [
+        f"{start_coords[0]},{start_coords[1]}",
+        f"{end_coords[0]},{end_coords[1]}"
+    ]
+
+    try:
+        response = requests.get(base_url, params=params)
+
+        # Imprimer l'URL complète pour le débogage
+        print(f"URL de la requête: {response.url}")
+
+        response.raise_for_status()  # Lève une exception si le statut n'est pas 2xx
+
         data = response.json()
-        if data.get("routes"):
-            route = data["routes"][0]
-            distance_km = route["distance"] / 1000  # Conversion en km
-            duration_hours = route["duration"] / 3600  # Conversion en heures
-            duration_hours = duration_hours * 0.75
-            route_coords = polyline.decode(route["geometry"])  # Liste de (lat, lon)
-            return distance_km, duration_hours, json.dumps(route_coords)  # Sauvegarde en JSON
-    return None, None, None
+
+        if "paths" in data and len(data["paths"]) > 0:
+            path = data["paths"][0]
+
+            # Extraire les informations pertinentes
+            distance_km = path["distance"] / 1000  # Conversion en km
+            duration_hours = path["time"] / 3600000  # Conversion de ms en heures
+
+            # Extraire les coordonnées du chemin
+            route_coords = []
+            for point in path["points"]["coordinates"]:
+                # GraphHopper retourne les coordonnées dans l'ordre [longitude, latitude, élévation]
+                # Nous voulons [latitude, longitude] pour être compatible avec le reste du code
+                route_coords.append([point[1], point[0]])
+
+            # Convertir en JSON pour stockage
+            route_coords_json = json.dumps(route_coords)
+
+            return distance_km, duration_hours, route_coords_json
+        else:
+            print("Aucun itinéraire trouvé dans la réponse GraphHopper")
+            return None, None, None
+
+    except requests.exceptions.RequestException as e:
+        print(f"Erreur lors de la requête GraphHopper: {e}")
+        print(f"Réponse: {response.text if 'response' in locals() else 'N/A'}")
+        return None, None, None
+    except (KeyError, IndexError, ValueError) as e:
+        print(f"Erreur lors du traitement de la réponse GraphHopper: {e}")
+        return None, None, None
 
 
-def calculate_routes_osrm(df):
-    """Calcule les distances, durées et les trajets avec OSRM si non enregistrés."""
+def calculate_routes_graphhopper(df):
+    """Calcule les distances, durées et les trajets avec GraphHopper si non enregistrés."""
+
+
     # Créer une copie du DataFrame pour éviter de modifier l'original
     df = df.copy()
-
-    # S'assurer que les colonnes nécessaires existent
-    for col in ["Latitude", "Longitude"]:
-        if col not in df.columns:
-            df[col] = None
-
-    if "Chemin" not in df.columns:
-        df["Chemin"] = None
-    if "Distance (km)" not in df.columns:
-        df["Distance (km)"] = None
-    if "Durée (h)" not in df.columns:
-        df["Durée (h)"] = None
 
     # Vérifier s'il y a des coordonnées manquantes et les ajouter
     missing_coords = df[df["Latitude"].isna() | df["Longitude"].isna()].index
@@ -241,36 +300,69 @@ def calculate_routes_osrm(df):
     durations = []
     route_geoms = []
 
+    # Variable pour suivre les itinéraires déjà calculés entre des paires de points
+    routes_cache = {}
+
     # Calculer les itinéraires pour chaque segment
     for i in range(len(df) - 1):  # On parcourt jusqu'à l'avant-dernier point
         lat1, lon1 = df.iloc[i]["Latitude"], df.iloc[i]["Longitude"]
         lat2, lon2 = df.iloc[i + 1]["Latitude"], df.iloc[i + 1]["Longitude"]
 
+        # Récupérer le type de déplacement
+        if "Type_Deplacement" in df.columns and pd.notna(df.iloc[i]["Type_Deplacement"]):
+            type_deplacement = df.iloc[i]["Type_Deplacement"]
+        else:
+            print(f"Type de déplacement non spécifié pour le segment {i} à {i + 1}")
+            type_deplacement = None
+
         # Vérifier si toutes les coordonnées sont valides
         valid_coords = pd.notna(lat1) and pd.notna(lon1) and pd.notna(lat2) and pd.notna(lon2)
 
-        # Si les coordonnées sont valides et le tracé est déjà calculé, on le récupère
-        if valid_coords and pd.notna(df.iloc[i]["Chemin"]) and pd.notna(df.iloc[i]["Distance (km)"]):
-            try:
-                route_coords = df.iloc[i]["Chemin"]
-                if isinstance(route_coords, str):
-                    route_coords = json.loads(route_coords)
-                distance = df.iloc[i]["Distance (km)"]
-                duration = df.iloc[i]["Durée (h)"] if "Durée (h)" in df.columns and pd.notna(
-                    df.iloc[i]["Durée (h)"]) else None
+        # Créer une clé unique pour cette paire de coordonnées et type de déplacement
+        if valid_coords and type_deplacement is not None:
+            route_key = f"{lat1},{lon1}|{lat2},{lon2}|{type_deplacement}"
 
-                # Si la durée n'est pas disponible, on recalcule tout
-                if duration is None:
-                    distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
-            except Exception as e:
-                st.warning(f"Erreur lors de la lecture du chemin à l'index {i}: {e}")
-                distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
-        # Sinon, on calcule un nouveau tracé si les coordonnées sont valides
-        elif valid_coords:
-            distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
-        # Si les coordonnées sont invalides, on ne peut pas calculer de tracé
+            # Vérifier si l'itinéraire est déjà dans le cache
+            if route_key in routes_cache:
+                distance, duration, route_coords = routes_cache[route_key]
+            # Si déjà calculé dans le DataFrame et type de déplacement identique, on utilise cette valeur
+            elif pd.notna(df.iloc[i]["Chemin"]) and pd.notna(df.iloc[i]["Distance (km)"]):
+                try:
+                    route_coords = df.iloc[i]["Chemin"]
+                    if isinstance(route_coords, str):
+                        route_coords = json.loads(route_coords)
+                    distance = df.iloc[i]["Distance (km)"]
+                    duration = df.iloc[i]["Durée (h)"] if pd.notna(df.iloc[i]["Durée (h)"]) else None
+
+                    # Si la durée n'est pas disponible, on calcule l'itinéraire
+                    if duration is None:
+                        start_coords = (lat1, lon1)
+                        end_coords = (lat2, lon2)
+                        distance, duration, route_coords = get_graphhopper_route(start_coords, end_coords,
+                                                                                 type_deplacement)
+                        # Mettre en cache
+                        routes_cache[route_key] = (distance, duration, route_coords)
+                except Exception as e:
+                    print(f"Erreur lors de la lecture du chemin à l'index {i}: {e}")
+                    start_coords = (lat1, lon1)
+                    end_coords = (lat2, lon2)
+                    distance, duration, route_coords = get_graphhopper_route(start_coords, end_coords, type_deplacement)
+                    # Mettre en cache
+                    routes_cache[route_key] = (distance, duration, route_coords)
+            else:
+                # Sinon on calcule un nouveau tracé
+                start_coords = (lat1, lon1)
+                end_coords = (lat2, lon2)
+                distance, duration, route_coords = get_graphhopper_route(start_coords, end_coords, type_deplacement)
+                # Mettre en cache
+                routes_cache[route_key] = (distance, duration, route_coords)
         else:
-            st.warning(f"Coordonnées manquantes pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire.")
+            # Coordonnées invalides ou type de déplacement non défini
+            if not valid_coords:
+                print(f"Coordonnées manquantes pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire.")
+            else:
+                print(
+                    f"Type de déplacement non défini pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire.")
             distance = None
             duration = None
             route_coords = json.dumps([])
@@ -296,7 +388,7 @@ def calculate_routes_osrm(df):
 
     return distances, durations, route_geoms, df
 
-
+@st.cache_data()
 def identifier_sejours_multiples(df):
     """Identifie les séjours multiples au même endroit et met à jour les durées"""
     # Créer une copie pour éviter de modifier le DataFrame original
@@ -323,7 +415,7 @@ def identifier_sejours_multiples(df):
             # Même endroit, ajouter à ce groupe
             groupe_actuel.append(i)
         else:
-            # Nouvel endroit, terminer le groupe actuel et en commencer un nouveau
+            # Nouvel endroit, terminer le groupe actuel et en coammencer un nouveau
             groupes_sejour.append(groupe_actuel)
             groupe_actuel = [i]
 
@@ -345,6 +437,57 @@ def identifier_sejours_multiples(df):
                 df_avec_duree.at[i, 'Duree_Sejour'] = -1
 
     return df_avec_duree
+
+@st.cache_data
+def charger_routes_existantes(df):
+    """
+    Charge les routes, distances et durées existantes dans le DataFrame
+    sans recalculer les valeurs manquantes.
+
+    Args:
+        df: DataFrame avec les données du voyage
+
+    Returns:
+        distances, durations, routes, df
+    """
+    import json
+    import pandas as pd
+
+    # Créer une copie du DataFrame pour éviter de modifier l'original
+    df = df.copy()
+
+    # Initialiser les listes pour stocker les résultats
+    distances = []
+    durations = []
+    routes = []
+
+    # Parcourir le DataFrame pour extraire les informations existantes
+    for i in range(len(df) - 1):  # On parcourt jusqu'à l'avant-dernier point
+        # Récupérer les valeurs existantes
+        distance = df.iloc[i]["Distance (km)"] if "Distance (km)" in df.columns else None
+        duration = df.iloc[i]["Durée (h)"] if "Durée (h)" in df.columns else None
+
+        # Récupérer les coordonnées du chemin
+        route_coords = df.iloc[i]["Chemin"] if "Chemin" in df.columns else None
+
+        # Convertir les coordonnées JSON en liste si nécessaire
+        if isinstance(route_coords, str) and route_coords:
+            try:
+                route_coords = json.loads(route_coords)
+            except json.JSONDecodeError:
+                route_coords = []
+
+        # Ajouter aux listes
+        distances.append(distance)
+        durations.append(duration)
+        routes.append(route_coords if isinstance(route_coords, list) else route_coords)
+
+    # Ajouter une dernière valeur pour correspondre à la taille du DataFrame
+    distances.append(None)
+    durations.append(None)
+    routes.append([])
+
+    return distances, durations, routes, df
 
 
 def ouvrir_pdf(chemin_pdf, use_expander = False):

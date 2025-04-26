@@ -7,9 +7,10 @@ from folium.plugins import MiniMap
 from core import (
     charger_donnees,
     sauvegarder_donnees,
-    calculate_routes_osrm,
+    calculate_routes_graphhopper,
     identifier_sejours_multiples,
     ouvrir_pdf,
+    charger_routes_existantes
 )
 
 
@@ -308,7 +309,7 @@ def afficher_pdfs_selectbox(df):
     else:
         st.info("Aucun hébergement avec document PDF disponible.")
 
-
+@st.cache_data()
 def afficher_recapitulatif_metrics(df, distance_totale=None, duree_totale=None):
     """Affiche le récapitulatif du budget, de la distance et de la durée en utilisant st.metrics"""
 
@@ -456,61 +457,106 @@ def creer_editeur_donnees(df):
 
     return edited_df, df_visible, adresses_actuelles
 
+
 def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file):
     """Traite les modifications apportées aux données et recalcule les distances si nécessaire"""
-    # Trouver les lignes modifiées
-    modifications = edited_df.compare(df_visible)
+    # Vérifier si de nouvelles lignes ont été ajoutées
+    if len(edited_df) > len(df_visible):
+        st.info(f"Détection de {len(edited_df) - len(df_visible)} nouvelles lignes.")
 
-    if not modifications.empty:
-        indices_modifiés = modifications.index.tolist()
+        # Pour les nouvelles lignes, on ajoute directement au DataFrame principal
+        nouvelles_lignes = edited_df.iloc[len(df_visible):]
+        for _, nouvelle_ligne in nouvelles_lignes.iterrows():
+            # Créer une nouvelle ligne pour df avec toutes les colonnes nécessaires
+            nouvelle_ligne_complete = pd.Series(index=df.columns)
 
-        # Identifier spécifiquement les modifications d'adresses
-        adresses_modifiées = set()
-        if "Adresse" in edited_df.columns and "Adresse" in df_visible.columns:
-            for idx in indices_modifiés:
-                if idx < len(adresses_actuelles) and idx < len(edited_df):
-                    if edited_df.loc[idx, "Adresse"] != adresses_actuelles.loc[idx]:
-                        adresses_modifiées.add(idx)
+            # Copier les valeurs existantes
+            for col in nouvelle_ligne.index:
+                if col in df.columns:
+                    nouvelle_ligne_complete[col] = nouvelle_ligne[col]
 
-        # Mettre à jour les valeurs modifiées dans le DataFrame complet
-        for idx in indices_modifiés:
+            # Ajouter un ordre pour la nouvelle ligne (à la fin)
+            if "ordre" in df.columns:
+                nouvelle_ligne_complete["ordre"] = df["ordre"].max() + 1 if not df.empty else 1
+
+            # Ajouter la nouvelle ligne au DataFrame principal
+            df = pd.concat([df, pd.DataFrame([nouvelle_ligne_complete])], ignore_index=True)
+
+        # Sauvegarder immédiatement pour les nouvelles lignes
+        df = df.sort_values(by="ordre").reset_index(drop=True)
+        sauvegarder_donnees(df, nom_fichier=uploaded_file)
+        st.success("✅ Nouvelles lignes ajoutées avec succès!")
+        st.rerun()
+        return
+
+    # Ne comparer que les lignes existantes (pour les modifications)
+    if len(edited_df) == len(df_visible):
+        # Vérifier les modifications ligne par ligne et colonne par colonne
+        routes_a_recalculer = set()
+        modifications_detectees = False
+
+        for idx in range(len(edited_df)):
             for col in edited_df.columns:
-                df.loc[idx, col] = edited_df.loc[idx, col]
+                # Éviter de comparer la colonne 'Afficher PDF' qui est un état temporaire
+                if col == 'Afficher PDF':
+                    continue
 
-        # Réinitialiser les coordonnées et chemins pour les adresses modifiées
-        for idx in adresses_modifiées:
-            # Réinitialiser les colonnes géographiques
-            df.loc[idx, "Latitude"] = None
-            df.loc[idx, "Longitude"] = None
+                # Vérifier si la valeur a été modifiée
+                if edited_df.loc[idx, col] != df_visible.loc[idx, col]:
+                    modifications_detectees = True
+
+                    # Mettre à jour la valeur dans le DataFrame complet
+                    if col in df.columns:
+                        df.loc[idx, col] = edited_df.loc[idx, col]
+
+                    # Vérifier les modifications qui nécessitent un recalcul des routes
+                    if col == "Adresse":
+                        routes_a_recalculer.add(idx)
+                        # Réinitialiser les coordonnées
+                        df.loc[idx, "Latitude"] = None
+                        df.loc[idx, "Longitude"] = None
+
+                    if col == "Type_Deplacement":
+                        routes_a_recalculer.add(idx)
+
+        # Pour chaque route à recalculer, réinitialiser les données de chemin
+        for idx in routes_a_recalculer:
             df.loc[idx, "Chemin"] = None
             df.loc[idx, "Distance (km)"] = None
+            df.loc[idx, "Durée (h)"] = None
 
             # Réinitialiser aussi le chemin précédent si ce n'est pas la première ligne
             if idx > 0:
                 df.loc[idx - 1, "Chemin"] = None
                 df.loc[idx - 1, "Distance (km)"] = None
+                df.loc[idx - 1, "Durée (h)"] = None
 
-        # Recalculer les routes et distances pour tout le DataFrame
-        # Cela permettra de recalculer automatiquement les coordonnées manquantes
-        with st.spinner("Recalcul des itinéraires et des distances..."):
-            distances_list,durations, route_geoms, df_updated = calculate_routes_osrm(df)
+        if modifications_detectees:
+            if routes_a_recalculer:
+                st.info(f"Recalcul des routes pour les indices : {sorted(routes_a_recalculer)}")
 
-            # Mettre à jour le DataFrame avec les résultats recalculés
-            df = df_updated
+                # Recalculer les routes et distances pour tout le DataFrame
+                with st.spinner("Recalcul des itinéraires et des distances..."):
+                    distances_list, durations, route_geoms, df_updated = calculate_routes_graphhopper(df)
+                    # Mettre à jour le DataFrame avec les résultats recalculés
+                    df = df_updated
+
+            # Trier et réinitialiser l'index
+            df = df.sort_values(by="ordre").reset_index(drop=True)
 
             # Sauvegarder le DataFrame mis à jour
             sauvegarder_donnees(df, nom_fichier=uploaded_file)
 
-        # Calculer la distance totale mise à jour
-        distance_totale_maj = df["Distance (km)"].sum(skipna=True)
+            # Calculer la distance totale mise à jour
+            distance_totale_maj = df["Distance (km)"].sum(skipna=True)
 
-        st.success("✅ Modifications appliquées et distances recalculées !")
-        st.sidebar.write(f"**Distance totale mise à jour :** {distance_totale_maj:.2f} km")
+            st.success("✅ Modifications appliquées avec succès!")
+            st.sidebar.write(f"**Distance totale mise à jour :** {distance_totale_maj:.2f} km")
 
-        # Recharger la page pour refléter les changements
-        st.rerun()
-    else:
-        st.info("Aucune modification détectée.")
+            # Recharger la page pour refléter les changements
+            st.rerun()
+        else:
+            st.info("Aucune modification détectée.")
 
 
 def main():
@@ -528,7 +574,7 @@ def main():
 
     with tab1:
         # Calculer les distances et les trajets
-        distances,durations, routes, df = calculate_routes_osrm(df)
+        distances,durations, routes, df = charger_routes_existantes(df)
 
         # Identifier les séjours multiples
         df_avec_duree = identifier_sejours_multiples(df)
@@ -552,6 +598,7 @@ def main():
 
         # Bouton pour appliquer les modifications
         if st.button("🔄 Appliquer les modifications"):
+            df = df.sort_values(by="ordre").reset_index(drop=True)
             traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file)
 
 
