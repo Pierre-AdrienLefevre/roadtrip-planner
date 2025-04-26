@@ -242,9 +242,6 @@ def creer_carte(df, df_avec_duree, distances=None, durations=None):
             icon=icon
         ).add_to(m)
 
-    # Ajouter une mini-carte
-    folium.plugins.MiniMap().add_to(m)
-
     # Ajouter le contrôle des couches pour basculer entre carte et satellite
     folium.LayerControl().add_to(m)
 
@@ -397,7 +394,7 @@ def creer_editeur_donnees(df):
         "Ville": st.column_config.TextColumn("Ville", width="medium"),
         "Nom": st.column_config.TextColumn("Hébergement", width="medium"),
         "Prix": st.column_config.NumberColumn("Prix ($)", format="%.2f", width='small'),
-        "Nuit": st.column_config.DateColumn("Nuit", width="small"),
+        "Nuit": st.column_config.DatetimeColumn("Nuit", width="small", format="HH[h] DD/MM"),
         "Lien": st.column_config.TextColumn("Lien", width="small")
     }
 
@@ -475,18 +472,16 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
                 if col in df.columns:
                     nouvelle_ligne_complete[col] = nouvelle_ligne[col]
 
-            # Ajouter un ordre pour la nouvelle ligne (à la fin)
-            if "ordre" in df.columns:
-                nouvelle_ligne_complete["ordre"] = df["ordre"].max() + 1 if not df.empty else 1
-
             # Ajouter la nouvelle ligne au DataFrame principal
             df = pd.concat([df, pd.DataFrame([nouvelle_ligne_complete])], ignore_index=True)
 
         # Sauvegarder immédiatement pour les nouvelles lignes
-        df = df.sort_values(by="ordre").reset_index(drop=True)
+        df = df.sort_values(by="Nuit").reset_index(drop=True)
+
+        _, _, _, df = calculate_routes_graphhopper(df)
+
         sauvegarder_donnees(df, nom_fichier=uploaded_file)
         st.success("✅ Nouvelles lignes ajoutées avec succès!")
-        st.rerun()
         return
 
     # Ne comparer que les lignes existantes (pour les modifications)
@@ -542,7 +537,7 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
                     df = df_updated
 
             # Trier et réinitialiser l'index
-            df = df.sort_values(by="ordre").reset_index(drop=True)
+            df = df.sort_values(by="Nuit").reset_index(drop=True)
 
             # Sauvegarder le DataFrame mis à jour
             sauvegarder_donnees(df, nom_fichier=uploaded_file)
@@ -598,7 +593,7 @@ def main():
 
         # Bouton pour appliquer les modifications
         if st.button("🔄 Appliquer les modifications"):
-            df = df.sort_values(by="ordre").reset_index(drop=True)
+            df = df.sort_values(by="Nuit").reset_index(drop=True)
             traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file)
 
 
