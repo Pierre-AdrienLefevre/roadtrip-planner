@@ -6,14 +6,32 @@ import streamlit as st
 
 def formater_date_sejour(row):
     """Formate l'affichage de la durée du séjour"""
-    date_debut = row["Nuit"] if "Nuit" in row and pd.notna(row["Nuit"]) else ""
-    date_fin = row["Date_Fin"] if "Date_Fin" in row and pd.notna(row["Date_Fin"]) else ""
+    # Conversion des objets Timestamp en chaînes de caractères (date uniquement)
+    if "Nuit" in row and pd.notna(row["Nuit"]):
+        # Si c'est un Timestamp, le convertir en chaîne au format YYYY-MM-DD
+        if isinstance(row["Nuit"], pd.Timestamp):
+            date_debut = row["Nuit"].strftime("%Y-%m-%d")
+        else:
+            # Si c'est déjà une chaîne, prendre juste la partie date
+            date_debut = str(row["Nuit"]).split()[0]
+    else:
+        date_debut = ""
+
+    if "Date_Fin" in row and pd.notna(row["Date_Fin"]):
+        if isinstance(row["Date_Fin"], pd.Timestamp):
+            date_fin = row["Date_Fin"].strftime("%Y-%m-%d")
+        else:
+            date_fin = str(row["Date_Fin"]).split()[0]
+    else:
+        date_fin = ""
+
     duree = row["Duree_Sejour"] if "Duree_Sejour" in row else 1
 
     if duree > 1 and date_debut and date_fin:
         return f"du {date_debut} au {date_fin} ({duree} nuits)"
     else:
         return f"{date_debut}"
+
 
 def creer_icones():
     """Crée et retourne les icônes pour les différents types de points sur la carte"""
@@ -74,7 +92,6 @@ def initialiser_carte(start_lat, start_lon):
 
     mapbox_token = st.secrets["mapbox"]["token"]
 
-
     # Ajouter la couche satellite Mapbox
     folium.TileLayer(
         tiles=f'https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{{z}}/{{x}}/{{y}}?access_token={mapbox_token}',
@@ -98,6 +115,11 @@ def ajouter_routes(m, df, distances=None, durations=None):
         if pd.notna(df.iloc[i]["Chemin"]):
             route_coords = json.loads(df.iloc[i]["Chemin"])
             if route_coords:
+                # Déterminer si c'est un déplacement à pied
+                is_marche = False
+                if "Type_Deplacement" in df.columns and pd.notna(df.iloc[i]["Type_Deplacement"]):
+                    is_marche = df.iloc[i]["Type_Deplacement"].lower() == "marche"
+
                 # Calculer la distance et la durée
                 distance_text = ""
                 duration_text = ""
@@ -123,13 +145,17 @@ def ajouter_routes(m, df, distances=None, durations=None):
                 if duration_text:
                     tooltip += f" - Durée: {duration_text}"
 
+                # Définir le style de ligne selon le type de déplacement
+                dash_array = "10, 10" if is_marche else None
+
                 # Tracer la route
                 route = folium.PolyLine(
                     locations=route_coords,
                     color="#4169E1",  # Bleu royal
                     weight=4,
                     opacity=0.8,
-                    tooltip=tooltip
+                    tooltip=tooltip,
+                    dash_array=dash_array  # Ligne pointillée pour la marche
                 )
                 route.add_to(m)
 
