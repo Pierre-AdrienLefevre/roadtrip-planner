@@ -49,7 +49,6 @@ def afficher_pdfs_selectbox(df):
             pdf_links[label] = row["Lien"]
 
         # Créer un titre et un séparateur
-        st.markdown("---")
         st.subheader("📄 Documents PDF")
 
         # Sélection de l'hébergement avec st.selectbox
@@ -78,7 +77,8 @@ def afficher_pdfs_selectbox(df):
 
 @st.cache_data()
 def afficher_recapitulatif_metrics(df, distance_totale=None, duree_totale=None):
-    """Affiche le récapitulatif du budget, de la distance et de la durée en utilisant st.metrics"""
+    """Affiche le récapitulatif du budget, de la distance et de la durée en utilisant st.metrics
+    en excluant les déplacements à pied des calculs de distance et durée"""
 
     # Créer une ligne avec trois colonnes pour les métriques
     col1, col2, col3 = st.columns(3)
@@ -91,18 +91,28 @@ def afficher_recapitulatif_metrics(df, distance_totale=None, duree_totale=None):
             value=f"{total_budget:.2f} $"
         )
 
-    # Afficher la distance totale dans la seconde colonne
+    # Calculer la distance totale en excluant les déplacements à pied
     if distance_totale is None:
-        distance_totale = df["Distance (km)"].sum(skipna=True)
+        # Filtrer pour exclure les déplacements à pied
+        if "Type_Deplacement" in df.columns:
+            df_vehicule = df[df["Type_Deplacement"].fillna("").str.lower() != "marche"]
+            distance_totale = df_vehicule["Distance (km)"].sum(skipna=True)
+        else:
+            distance_totale = df["Distance (km)"].sum(skipna=True)
+
     with col2:
         st.metric(
-            label="🚗 Distance totale",
+            label="🚗 Distance totale en véhicule",
             value=f"{distance_totale:.2f} km"
         )
 
-    # Afficher la durée totale dans la troisième colonne
+    # Calculer la durée totale en excluant les déplacements à pied
     if duree_totale is None and "Durée (h)" in df.columns:
-        duree_totale = df["Durée (h)"].sum(skipna=True)
+        if "Type_Deplacement" in df.columns:
+            df_vehicule = df[df["Type_Deplacement"].fillna("").str.lower() != "marche"]
+            duree_totale = df_vehicule["Durée (h)"].sum(skipna=True)
+        else:
+            duree_totale = df["Durée (h)"].sum(skipna=True)
 
     if duree_totale is not None:
         # Convertir en heures et minutes
@@ -345,7 +355,7 @@ def main():
 
         # Créer et afficher la carte
         m = creer_carte(df, df_avec_duree, distances, durations)
-        st_folium(m, height=700, use_container_width=True, returned_objects=[])
+        st_folium(m, height=700, use_container_width= True, returned_objects=[])
 
         # Remplacer la fonction d'affichage d'emails par celle pour les PDF
         afficher_pdfs_selectbox(df)
