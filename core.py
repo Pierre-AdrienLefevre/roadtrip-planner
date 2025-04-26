@@ -214,7 +214,7 @@ def get_graphhopper_route(start_coords, end_coords, type_deplacement="Marche"):
         return None, None, None
 
     # Ta clé API GraphHopper
-    api_key = "ce1e4fa9-d549-4199-8876-c2a59f0735bc"
+    api_key = st.secrets["graphhopper"]["token"]
 
     # Construire l'URL de l'API GraphHopper
     base_url = "https://graphhopper.com/api/1/route"
