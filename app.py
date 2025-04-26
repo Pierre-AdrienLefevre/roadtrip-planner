@@ -38,6 +38,7 @@ def creer_icones():
     icons = {
         "depart": folium.Icon(color="red", icon="play", prefix="fa"),
         "arrivee": folium.Icon(color="green", icon="flag-checkered", prefix="fa"),
+        "activite": folium.Icon(color="orange", icon="car", prefix="fa"),  # Nouvelle icône pour les activités
     }
 
     # Icônes pour les types d'hébergement avec couleurs selon le nombre de nuits
@@ -67,6 +68,7 @@ def creer_icones():
     colors = {
         "départ": "#DC143C",  # Rouge
         "arrivée": "#228B22",  # Vert
+        "activité": "#FFA500",  # Orange pour les activités
         "séjour_1": "#87CEFA",  # Bleu clair (1 nuit)
         "séjour_2": "#1E90FF",  # Bleu (2 nuits)
         "séjour_3": "#4682B4",  # Bleu acier (3 nuits)
@@ -169,6 +171,16 @@ def creer_carte(df, df_avec_duree, distances=None, durations=None):
             icon = icons["arrivee"]
             title = "Point d'arrivée"
             color = colors["arrivée"]
+        # Nouveau code pour gérer les points de type "passage" et "activité"
+        elif "Type_Point" in row and pd.notna(row["Type_Point"]):
+            if row["Type_Point"].lower() == "passage":
+                # Pour les points de passage, on ne les affiche pas du tout
+                continue  # Passer à l'itération suivante sans créer de marqueur
+            elif row["Type_Point"].lower() == "activité" or row["Type_Point"].lower() == "activite":
+                point_type = "activité"
+                icon = icons["activite"]
+                title = "Point d'activité"
+                color = colors["activité"]
         else:
             # Déterminer la catégorie de séjour en fonction de la durée
             if duree_sejour == 1:
@@ -227,10 +239,10 @@ def creer_carte(df, df_avec_duree, distances=None, durations=None):
             tooltip_text = f"Départ: {ville} ({date_info})"
         elif point_type == "arrivée":
             tooltip_text = f"Arrivée: {ville} ({date_info})"
+        elif point_type == "activité":  # Nouveau cas pour les activités
+            tooltip_text = f"{ville} - Activité/Parking ({date_info})"
         elif "camping" in type_hebergement:
             tooltip_text = f"{ville} - Camping ({date_info})"
-        elif "hôtel" in type_hebergement:
-            tooltip_text = f"{ville} - Hôtel ({date_info})"
         else:
             tooltip_text = f"{ville} - Séjour de {duree_sejour} nuits ({date_info})"
 
@@ -547,9 +559,6 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
 
             st.success("✅ Modifications appliquées avec succès!")
             st.sidebar.write(f"**Distance totale mise à jour :** {distance_totale_maj:.2f} km")
-
-            # Recharger la page pour refléter les changements
-            st.rerun()
         else:
             st.info("Aucune modification détectée.")
 
@@ -579,7 +588,7 @@ def main():
 
         # Créer et afficher la carte
         m = creer_carte(df, df_avec_duree, distances, durations)
-        st_folium(m, width=None, height=700)
+        st_folium(m, height=700, use_container_width=True, returned_objects=[])
 
         # Remplacer la fonction d'affichage d'emails par celle pour les PDF
         afficher_pdfs_selectbox(df)
@@ -593,7 +602,6 @@ def main():
 
         # Bouton pour appliquer les modifications
         if st.button("🔄 Appliquer les modifications"):
-            df = df.sort_values(by="Nuit").reset_index(drop=True)
             traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file)
 
 
