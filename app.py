@@ -1,217 +1,21 @@
 import streamlit as st
 import pandas as pd
-import folium
-import json
 from streamlit_folium import st_folium
-from folium.plugins import MiniMap
 from core import (
     charger_donnees,
     sauvegarder_donnees,
-    calculate_routes_osrm,
     identifier_sejours_multiples,
     ouvrir_pdf,
+    charger_routes_existantes
 )
+from utils.get_route import calculate_routes
 
+from utils.creer_carte import creer_carte
 
 def configurer_page():
     """Configuration initiale de la page Streamlit"""
     st.set_page_config(layout="wide")
     st.title("🗺️ Carte interactive du Roadtrip 🚗")
-
-
-def formater_date_sejour(row):
-    """Formate l'affichage de la durée du séjour"""
-    date_debut = row["Nuit"] if "Nuit" in row and pd.notna(row["Nuit"]) else ""
-    date_fin = row["Date_Fin"] if "Date_Fin" in row and pd.notna(row["Date_Fin"]) else ""
-    duree = row["Duree_Sejour"] if "Duree_Sejour" in row else 1
-
-    if duree > 1 and date_debut and date_fin:
-        return f"du {date_debut} au {date_fin} ({duree} nuits)"
-    else:
-        return f"{date_debut}"
-
-
-def creer_icones():
-    """Crée et retourne les icônes pour les différents types de points sur la carte"""
-    icons = {
-        "etape": folium.Icon(color="blue", icon="bed", prefix="fa"),
-        "depart": folium.Icon(color="red", icon="play", prefix="fa"),
-        "arrivee": folium.Icon(color="green", icon="flag-checkered", prefix="fa"),
-        "sejour": folium.Icon(color="purple", icon="home", prefix="fa"),
-        "camping": folium.Icon(color="orange", icon="campground", prefix="fa")  # Ajout de l'icône camping
-    }
-
-    return icons
-
-
-def creer_carte(df, df_avec_duree, distances=None, durations=None):
-    """Crée et configure la carte Folium avec les routes et marqueurs"""
-    start_lat = df.iloc[0]["Latitude"]
-    start_lon = df.iloc[0]["Longitude"]
-
-    # Créer une carte sans tuile de base pour pouvoir alterner entre les vues
-    m = folium.Map(
-        location=[start_lat, start_lon],
-        zoom_start=6,
-        tiles=None,
-        width="100%",
-        height="100%"
-    )
-
-    # Ajouter la couche satellite
-    folium.TileLayer(
-        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        name="Satellite",
-        attr='Esri',
-    ).add_to(m)
-
-
-    # Ajouter la couche de carte normale
-    folium.TileLayer(
-        tiles="CartoDB positron",
-        name="Carte",
-        attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    ).add_to(m)
-
-    # Ajouter les tracés des routes entre chaque point
-    for i in range(len(df) - 1):
-        if pd.notna(df.iloc[i]["Chemin"]):
-            route_coords = json.loads(df.iloc[i]["Chemin"])
-            if route_coords:
-                # Calculer la distance et la durée
-                distance_text = ""
-                duration_text = ""
-                if "Distance (km)" in df.columns and pd.notna(df.iloc[i]["Distance (km)"]):
-                    distance_text = f"{df.iloc[i]['Distance (km)']:.2f} km"
-                elif distances is not None and i < len(distances) and pd.notna(distances[i]):
-                    distance_text = f"{(distances[i] / 1000):.2f} km"
-
-                if "Durée (h)" in df.columns and pd.notna(df.iloc[i]["Durée (h)"]):
-                    # Convertir la durée en heures:minutes
-                    duree_heures = df.iloc[i]["Durée (h)"]
-                    heures = int(duree_heures)
-                    minutes = int((duree_heures - heures) * 60)
-                    duration_text = f"{heures}h{minutes:02d}"
-                elif durations is not None and i < len(durations) and pd.notna(durations[i]):
-                    duree_heures = durations[i]
-                    heures = int(duree_heures)
-                    minutes = int((duree_heures - heures) * 60)
-                    duration_text = f"{heures}h{minutes:02d}"
-
-                # Tracer la route avec distance et durée
-                tooltip = f"Distance: {distance_text}"
-                if duration_text:
-                    tooltip += f" - Durée: {duration_text}"
-
-                # Tracer la route
-                route = folium.PolyLine(
-                    locations=route_coords,
-                    color="#4169E1",  # Bleu royal
-                    weight=4,
-                    opacity=0.8,
-                    tooltip=tooltip
-                )
-                route.add_to(m)
-
-    # Obtenir les icônes
-    icons = creer_icones()
-
-    # Couleurs pour les popups
-    colors = {
-        "départ": "#DC143C",  # Rouge
-        "arrivée": "#228B22",  # Vert
-        "séjour": "#800080",  # Violet
-        "étape": "#1E90FF",  # Bleu
-        "camping": "#FF8C00"  # Orange pour le camping
-    }
-
-    # Parcourir le DataFrame traité pour afficher les marqueurs
-    for i, row in df_avec_duree.iterrows():
-        # Ignorer les lignes qui ont été fusionnées avec une étape précédente
-        if row["Duree_Sejour"] == -1:
-            continue
-
-        # Déterminer le type de point
-        if i == 0:
-            point_type = "départ"
-            icon = icons["depart"]
-            title = "Point de départ"
-        elif i == len(df) - 1 or row["Adresse"] == df.iloc[-1]["Adresse"]:
-            point_type = "arrivée"
-            icon = icons["arrivee"]
-            title = "Point d'arrivée"
-        elif type_heb_lower := (row["Type"].lower() if "Type" in row and pd.notna(row["Type"]) else ""):
-            # Vérifier si c'est un camping
-            if "camping" in type_heb_lower or "camp" in type_heb_lower:
-                point_type = "camping"
-                icon = icons["camping"]
-                title = f"Camping ({row['Duree_Sejour']} nuits)"
-            elif row["Duree_Sejour"] > 1:
-                point_type = "séjour"
-                icon = icons["sejour"]
-                title = f"Séjour de {row['Duree_Sejour']} nuits"
-            else:
-                point_type = "étape"
-                icon = icons["camping"]
-                title = f"Étape {i}"
-        else:
-            if row["Duree_Sejour"] > 1:
-                point_type = "séjour"
-                icon = icons["sejour"]
-                title = f"Séjour de {row['Duree_Sejour']} nuits"
-            else:
-                point_type = "étape"
-                icon = icons["camping"]
-                title = f"Étape {i}"
-
-        color = colors[point_type]
-
-        # Récupérer les informations
-        date_info = formater_date_sejour(row)
-        ville = row["Ville"] if "Ville" in row and pd.notna(row["Ville"]) else ""
-        nom = row["Nom"] if "Nom" in row and pd.notna(row["Nom"]) else ""
-        prix = row["Prix"] if "Prix" in row and pd.notna(row["Prix"]) else ""
-        type_heb = row["Type"] if "Type" in row and pd.notna(row["Type"]) else ""
-
-        # Créer le contenu de la popup
-        html_content = f"""
-        <div style="min-width: 180px;">
-            <h4 style="color: {color}; margin-bottom: 5px;">{title}</h4>
-            <strong>{ville}</strong><br>
-            <em>{date_info}</em><br>
-            <strong>Hébergement:</strong> {nom}<br>
-            <strong>Type:</strong> {type_heb}<br>
-            <strong>Prix:</strong> {prix}
-        </div>
-        """
-
-        # Créer le texte du tooltip
-        if point_type == "départ":
-            tooltip_text = f"Départ: {ville} ({date_info})"
-        elif point_type == "arrivée":
-            tooltip_text = f"Arrivée: {ville} ({date_info})"
-        elif point_type == "camping":
-            tooltip_text = f"{ville} - Camping ({date_info})"
-        elif point_type == "séjour":
-            tooltip_text = f"{ville} - Séjour de {row['Duree_Sejour']} nuits ({date_info})"
-        else:
-            tooltip_text = f"{ville} ({date_info})"
-
-        # Ajouter le marqueur
-        folium.Marker(
-            location=[row["Latitude"], row["Longitude"]],
-            popup=folium.Popup(html_content, max_width=300),
-            tooltip=tooltip_text,
-            icon=icon
-        ).add_to(m)
-
-    # Ajouter une mini-carte
-    folium.plugins.MiniMap().add_to(m)
-
-    # Ajouter le contrôle des couches pour basculer entre carte et satellite
-    folium.LayerControl().add_to(m)
-
-    return m
 
 
 def afficher_pdfs_selectbox(df):
@@ -268,11 +72,11 @@ def afficher_pdfs_selectbox(df):
                 if st.button("Fermer le PDF", key="carte_pdf_close_button"):
                     # Réinitialiser la sélection
                     st.session_state.carte_pdf_selectbox = None
-                    st.rerun()
+                    #st.rerun()
     else:
         st.info("Aucun hébergement avec document PDF disponible.")
 
-
+@st.cache_data()
 def afficher_recapitulatif_metrics(df, distance_totale=None, duree_totale=None):
     """Affiche le récapitulatif du budget, de la distance et de la durée en utilisant st.metrics"""
 
@@ -320,7 +124,7 @@ def creer_editeur_donnees(df):
         st.session_state.previous_checked_idx = None
 
     # Définir les colonnes à cacher
-    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Type', 'Distance (km)', 'Durée (h)']
+    colonnes_cachees = ['Chemin', 'Longitude', 'Latitude', 'Distance (km)', 'Durée (h)', 'Lien']
     df_visible = df.drop(columns=colonnes_cachees, errors="ignore")
 
     # Sauvegarde d'une copie des adresses actuelles
@@ -360,18 +164,18 @@ def creer_editeur_donnees(df):
         "Ville": st.column_config.TextColumn("Ville", width="medium"),
         "Nom": st.column_config.TextColumn("Hébergement", width="medium"),
         "Prix": st.column_config.NumberColumn("Prix ($)", format="%.2f", width='small'),
-        "Nuit": st.column_config.DateColumn("Nuit", width="small"),
+        "Nuit": st.column_config.DatetimeColumn("Nuit", width="small", format="HH[h] DD/MM"),
         "Lien": st.column_config.TextColumn("Lien", width="small")
     }
 
     # Édition interactive du tableau
     edited_df = st.data_editor(
         df_visible,
-        num_rows="fixed",
+        num_rows="dynamic",
         use_container_width=True,
         height=600,
         hide_index=True,
-        column_config=column_config
+        column_config=column_config,
     )
 
     # Traiter les changements de checkbox
@@ -389,7 +193,7 @@ def creer_editeur_donnees(df):
                 if checked_row_idx in df.index and pd.notna(df.loc[checked_row_idx, "Lien"]):
                     st.session_state.pdf_a_ouvrir = df.loc[checked_row_idx, "Lien"]
                     st.session_state.previous_checked_idx = checked_row_idx
-                    st.rerun()  # Recharger la page pour afficher le PDF
+                    #st.rerun()  # Recharger la page pour afficher le PDF
 
             # Décocher toutes les autres checkboxes
             for idx in edited_df.index:
@@ -401,7 +205,7 @@ def creer_editeur_donnees(df):
             # Si l'utilisateur a décoché la case, fermer le PDF
             st.session_state.pdf_a_ouvrir = None
             st.session_state.previous_checked_idx = None
-            st.rerun()  # Recharger la page pour fermer le PDF
+            #st.rerun()  # Recharger la page pour fermer le PDF
 
     # Afficher le PDF sélectionné
     if st.session_state.pdf_a_ouvrir:
@@ -416,65 +220,104 @@ def creer_editeur_donnees(df):
                 # C'est pourquoi nous utilisons previous_checked_idx pour suivre l'état
                 if "Afficher PDF" in edited_df.columns:
                     edited_df["Afficher PDF"] = False
-                st.rerun()
+                #st.rerun()
 
     return edited_df, df_visible, adresses_actuelles
 
+
 def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file):
     """Traite les modifications apportées aux données et recalcule les distances si nécessaire"""
-    # Trouver les lignes modifiées
-    modifications = edited_df.compare(df_visible)
+    # Vérifier si de nouvelles lignes ont été ajoutées
+    if len(edited_df) > len(df_visible):
+        st.info(f"Détection de {len(edited_df) - len(df_visible)} nouvelles lignes.")
 
-    if not modifications.empty:
-        indices_modifiés = modifications.index.tolist()
+        # Pour les nouvelles lignes, on ajoute directement au DataFrame principal
+        nouvelles_lignes = edited_df.iloc[len(df_visible):]
+        for _, nouvelle_ligne in nouvelles_lignes.iterrows():
+            # Créer une nouvelle ligne pour df avec toutes les colonnes nécessaires
+            nouvelle_ligne_complete = pd.Series(index=df.columns)
 
-        # Identifier spécifiquement les modifications d'adresses
-        adresses_modifiées = set()
-        if "Adresse" in edited_df.columns and "Adresse" in df_visible.columns:
-            for idx in indices_modifiés:
-                if idx < len(adresses_actuelles) and idx < len(edited_df):
-                    if edited_df.loc[idx, "Adresse"] != adresses_actuelles.loc[idx]:
-                        adresses_modifiées.add(idx)
+            # Copier les valeurs existantes
+            for col in nouvelle_ligne.index:
+                if col in df.columns:
+                    nouvelle_ligne_complete[col] = nouvelle_ligne[col]
 
-        # Mettre à jour les valeurs modifiées dans le DataFrame complet
-        for idx in indices_modifiés:
+            # Ajouter la nouvelle ligne au DataFrame principal
+            df = pd.concat([df, pd.DataFrame([nouvelle_ligne_complete])], ignore_index=True)
+
+        # Sauvegarder immédiatement pour les nouvelles lignes
+        df = df.sort_values(by="Nuit").reset_index(drop=True)
+
+        _, _, _, df = calculate_routes(df)
+
+        sauvegarder_donnees(df, nom_fichier=uploaded_file)
+        st.success("✅ Nouvelles lignes ajoutées avec succès!")
+        return
+
+    # Ne comparer que les lignes existantes (pour les modifications)
+    if len(edited_df) == len(df_visible):
+        # Vérifier les modifications ligne par ligne et colonne par colonne
+        routes_a_recalculer = set()
+        modifications_detectees = False
+
+        for idx in range(len(edited_df)):
             for col in edited_df.columns:
-                df.loc[idx, col] = edited_df.loc[idx, col]
+                # Éviter de comparer la colonne 'Afficher PDF' qui est un état temporaire
+                if col == 'Afficher PDF':
+                    continue
 
-        # Réinitialiser les coordonnées et chemins pour les adresses modifiées
-        for idx in adresses_modifiées:
-            # Réinitialiser les colonnes géographiques
-            df.loc[idx, "Latitude"] = None
-            df.loc[idx, "Longitude"] = None
+                # Vérifier si la valeur a été modifiée
+                if edited_df.loc[idx, col] != df_visible.loc[idx, col]:
+                    modifications_detectees = True
+
+                    # Mettre à jour la valeur dans le DataFrame complet
+                    if col in df.columns:
+                        df.loc[idx, col] = edited_df.loc[idx, col]
+
+                    # Vérifier les modifications qui nécessitent un recalcul des routes
+                    if col == "Adresse":
+                        routes_a_recalculer.add(idx)
+                        # Réinitialiser les coordonnées
+                        df.loc[idx, "Latitude"] = None
+                        df.loc[idx, "Longitude"] = None
+
+                    if col == "Type_Deplacement":
+                        routes_a_recalculer.add(idx)
+
+        # Pour chaque route à recalculer, réinitialiser les données de chemin
+        for idx in routes_a_recalculer:
             df.loc[idx, "Chemin"] = None
             df.loc[idx, "Distance (km)"] = None
+            df.loc[idx, "Durée (h)"] = None
 
             # Réinitialiser aussi le chemin précédent si ce n'est pas la première ligne
             if idx > 0:
                 df.loc[idx - 1, "Chemin"] = None
                 df.loc[idx - 1, "Distance (km)"] = None
+                df.loc[idx - 1, "Durée (h)"] = None
 
-        # Recalculer les routes et distances pour tout le DataFrame
-        # Cela permettra de recalculer automatiquement les coordonnées manquantes
-        with st.spinner("Recalcul des itinéraires et des distances..."):
-            distances_list, route_geoms, df_updated = calculate_routes_osrm(df)
+        if modifications_detectees:
+            if routes_a_recalculer:
+                st.info(f"Recalcul des routes pour les indices : {sorted(routes_a_recalculer)}")
 
-            # Mettre à jour le DataFrame avec les résultats recalculés
-            df = df_updated
+                # Recalculer les routes et distances pour tout le DataFrame
+                with st.spinner("Recalcul des itinéraires et des distances..."):
+                    distances_list, durations, route_geoms, df_updated = calculate_routes(df)
+                    # Mettre à jour le DataFrame avec les résultats recalculés
+                    df = df_updated
+
+            # Trier et réinitialiser l'index
+            df = df.sort_values(by="Nuit").reset_index(drop=True)
 
             # Sauvegarder le DataFrame mis à jour
             sauvegarder_donnees(df, nom_fichier=uploaded_file)
 
-        # Calculer la distance totale mise à jour
-        distance_totale_maj = df["Distance (km)"].sum(skipna=True)
+            # Calculer la distance totale mise à jour
+            distance_totale_maj = df["Distance (km)"].sum(skipna=True)
 
-        st.success("✅ Modifications appliquées et distances recalculées !")
-        st.sidebar.write(f"**Distance totale mise à jour :** {distance_totale_maj:.2f} km")
-
-        # Recharger la page pour refléter les changements
-        st.rerun()
-    else:
-        st.info("Aucune modification détectée.")
+            st.success("✅ Modifications appliquées avec succès!")
+        else:
+            st.info("Aucune modification détectée.")
 
 
 def main():
@@ -492,7 +335,7 @@ def main():
 
     with tab1:
         # Calculer les distances et les trajets
-        distances,durations, routes, df = calculate_routes_osrm(df)
+        distances,durations, routes, df = charger_routes_existantes(df)
 
         # Identifier les séjours multiples
         df_avec_duree = identifier_sejours_multiples(df)
@@ -502,7 +345,7 @@ def main():
 
         # Créer et afficher la carte
         m = creer_carte(df, df_avec_duree, distances, durations)
-        st_folium(m, width=None, height=700)
+        st_folium(m, height=700, use_container_width=True, returned_objects=[])
 
         # Remplacer la fonction d'affichage d'emails par celle pour les PDF
         afficher_pdfs_selectbox(df)

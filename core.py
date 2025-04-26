@@ -1,13 +1,10 @@
-from opencage.geocoder import OpenCageGeocode
-import polyline
-import requests
 import streamlit as st
 import pandas as pd
-import json
 import base64
 from github import Github, GithubException
 from io import BytesIO
 from streamlit_pdf_viewer import pdf_viewer
+import json
 
 @st.cache_data
 def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"):
@@ -147,156 +144,7 @@ def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des d
         return False
 
 
-def add_lat_lon(df, address_column="Adresse"):
-    """Ajoute les coordonnées géographiques (latitude, longitude) pour chaque adresse"""
-    try:
-        api_key = st.secrets["opencage"]["api_key"]
-    except KeyError:
-        st.error("Clé API OpenCage manquante. Vérifiez le fichier .streamlit/secrets.toml.")
-        return df
-
-    geocoder = OpenCageGeocode(api_key)
-
-    # Créer les colonnes Latitude et Longitude si elles n'existent pas
-    if "Latitude" not in df.columns:
-        df["Latitude"] = None
-    if "Longitude" not in df.columns:
-        df["Longitude"] = None
-
-    def get_coordinates(address):
-        try:
-            result = geocoder.geocode(address)
-            if result:
-                return result[0]["geometry"]["lat"], result[0]["geometry"]["lng"]
-        except Exception as e:
-            st.error(f"Erreur pour {address} : {e}")
-        return None, None
-
-    for index, row in df.iterrows():
-        if pd.isna(row["Latitude"]) or pd.isna(row["Longitude"]):
-            lat, lon = get_coordinates(row[address_column])
-            df.at[index, "Latitude"] = lat
-            df.at[index, "Longitude"] = lon
-
-    st.info("✅ Latitude et Longitude ajoutées avec succès !")
-    return df
-
-
-def get_osrm_route(lat1, lon1, lat2, lon2):
-    """Interroge OSRM pour obtenir le tracé, la distance et la durée entre deux points."""
-    # Vérifier que les coordonnées sont valides
-    if None in (lat1, lon1, lat2, lon2):
-        print("Coordonnées invalides, impossible de calculer l'itinéraire.")
-        return None, None, None
-
-    url = (
-        f"http://router.project-osrm.org/route/v1/driving/"
-        f"{lon1},{lat1};{lon2},{lat2}"
-        "?overview=full&geometries=polyline"
-    )
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        if data.get("routes"):
-            route = data["routes"][0]
-            distance_km = route["distance"] / 1000  # Conversion en km
-            duration_hours = route["duration"] / 3600  # Conversion en heures
-            duration_hours = duration_hours * 0.75
-            route_coords = polyline.decode(route["geometry"])  # Liste de (lat, lon)
-            return distance_km, duration_hours, json.dumps(route_coords)  # Sauvegarde en JSON
-    return None, None, None
-
-
-def calculate_routes_osrm(df):
-    """Calcule les distances, durées et les trajets avec OSRM si non enregistrés."""
-    # Créer une copie du DataFrame pour éviter de modifier l'original
-    df = df.copy()
-
-    # S'assurer que les colonnes nécessaires existent
-    for col in ["Latitude", "Longitude"]:
-        if col not in df.columns:
-            df[col] = None
-
-    if "Chemin" not in df.columns:
-        df["Chemin"] = None
-    if "Distance (km)" not in df.columns:
-        df["Distance (km)"] = None
-    if "Durée (h)" not in df.columns:
-        df["Durée (h)"] = None
-
-    # Vérifier s'il y a des coordonnées manquantes et les ajouter
-    missing_coords = df[df["Latitude"].isna() | df["Longitude"].isna()].index
-    if len(missing_coords) > 0:
-        # Appliquer add_lat_lon seulement aux lignes avec coordonnées manquantes
-        df_missing = df.loc[missing_coords].copy()
-        df_missing = add_lat_lon(df_missing)
-
-        # Mettre à jour le DataFrame original avec les nouvelles coordonnées
-        for idx in missing_coords:
-            df.loc[idx, "Latitude"] = df_missing.loc[idx, "Latitude"]
-            df.loc[idx, "Longitude"] = df_missing.loc[idx, "Longitude"]
-
-    # Initialiser les listes pour stocker les résultats
-    distances = []
-    durations = []
-    route_geoms = []
-
-    # Calculer les itinéraires pour chaque segment
-    for i in range(len(df) - 1):  # On parcourt jusqu'à l'avant-dernier point
-        lat1, lon1 = df.iloc[i]["Latitude"], df.iloc[i]["Longitude"]
-        lat2, lon2 = df.iloc[i + 1]["Latitude"], df.iloc[i + 1]["Longitude"]
-
-        # Vérifier si toutes les coordonnées sont valides
-        valid_coords = pd.notna(lat1) and pd.notna(lon1) and pd.notna(lat2) and pd.notna(lon2)
-
-        # Si les coordonnées sont valides et le tracé est déjà calculé, on le récupère
-        if valid_coords and pd.notna(df.iloc[i]["Chemin"]) and pd.notna(df.iloc[i]["Distance (km)"]):
-            try:
-                route_coords = df.iloc[i]["Chemin"]
-                if isinstance(route_coords, str):
-                    route_coords = json.loads(route_coords)
-                distance = df.iloc[i]["Distance (km)"]
-                duration = df.iloc[i]["Durée (h)"] if "Durée (h)" in df.columns and pd.notna(
-                    df.iloc[i]["Durée (h)"]) else None
-
-                # Si la durée n'est pas disponible, on recalcule tout
-                if duration is None:
-                    distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
-            except Exception as e:
-                st.warning(f"Erreur lors de la lecture du chemin à l'index {i}: {e}")
-                distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
-        # Sinon, on calcule un nouveau tracé si les coordonnées sont valides
-        elif valid_coords:
-            distance, duration, route_coords = get_osrm_route(lat1, lon1, lat2, lon2)
-        # Si les coordonnées sont invalides, on ne peut pas calculer de tracé
-        else:
-            st.warning(f"Coordonnées manquantes pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire.")
-            distance = None
-            duration = None
-            route_coords = json.dumps([])
-
-        # Mettre à jour le DataFrame directement
-        df.at[i, "Distance (km)"] = distance
-        df.at[i, "Durée (h)"] = duration
-
-        # S'assurer que route_coords est au format JSON
-        if isinstance(route_coords, list):
-            route_coords = json.dumps(route_coords)
-        df.at[i, "Chemin"] = route_coords
-
-        # Stocker pour retour de fonction
-        distances.append(distance)
-        durations.append(duration)
-        route_geoms.append(route_coords)
-
-    # Ajouter une dernière valeur pour correspondre à la taille du DataFrame
-    distances.append(None)
-    durations.append(None)
-    route_geoms.append(json.dumps([]))
-
-    return distances, durations, route_geoms, df
-
-
+@st.cache_data()
 def identifier_sejours_multiples(df):
     """Identifie les séjours multiples au même endroit et met à jour les durées"""
     # Créer une copie pour éviter de modifier le DataFrame original
@@ -323,7 +171,7 @@ def identifier_sejours_multiples(df):
             # Même endroit, ajouter à ce groupe
             groupe_actuel.append(i)
         else:
-            # Nouvel endroit, terminer le groupe actuel et en commencer un nouveau
+            # Nouvel endroit, terminer le groupe actuel et en coammencer un nouveau
             groupes_sejour.append(groupe_actuel)
             groupe_actuel = [i]
 
@@ -345,6 +193,57 @@ def identifier_sejours_multiples(df):
                 df_avec_duree.at[i, 'Duree_Sejour'] = -1
 
     return df_avec_duree
+
+@st.cache_data
+def charger_routes_existantes(df):
+    """
+    Charge les routes, distances et durées existantes dans le DataFrame
+    sans recalculer les valeurs manquantes.
+
+    Args:
+        df: DataFrame avec les données du voyage
+
+    Returns:
+        distances, durations, routes, df
+    """
+    import json
+    import pandas as pd
+
+    # Créer une copie du DataFrame pour éviter de modifier l'original
+    df = df.copy()
+
+    # Initialiser les listes pour stocker les résultats
+    distances = []
+    durations = []
+    routes = []
+
+    # Parcourir le DataFrame pour extraire les informations existantes
+    for i in range(len(df) - 1):  # On parcourt jusqu'à l'avant-dernier point
+        # Récupérer les valeurs existantes
+        distance = df.iloc[i]["Distance (km)"] if "Distance (km)" in df.columns else None
+        duration = df.iloc[i]["Durée (h)"] if "Durée (h)" in df.columns else None
+
+        # Récupérer les coordonnées du chemin
+        route_coords = df.iloc[i]["Chemin"] if "Chemin" in df.columns else None
+
+        # Convertir les coordonnées JSON en liste si nécessaire
+        if isinstance(route_coords, str) and route_coords:
+            try:
+                route_coords = json.loads(route_coords)
+            except json.JSONDecodeError:
+                route_coords = []
+
+        # Ajouter aux listes
+        distances.append(distance)
+        durations.append(duration)
+        routes.append(route_coords if isinstance(route_coords, list) else route_coords)
+
+    # Ajouter une dernière valeur pour correspondre à la taille du DataFrame
+    distances.append(None)
+    durations.append(None)
+    routes.append([])
+
+    return distances, durations, routes, df
 
 
 def ouvrir_pdf(chemin_pdf, use_expander = False):
