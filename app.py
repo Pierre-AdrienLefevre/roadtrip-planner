@@ -4,11 +4,12 @@ from streamlit_folium import st_folium
 from core import (
     charger_donnees,
     sauvegarder_donnees,
-    calculate_routes_graphhopper,
     identifier_sejours_multiples,
     ouvrir_pdf,
     charger_routes_existantes
 )
+from utils.get_route import calculate_routes
+
 from utils.creer_carte import creer_carte
 
 def configurer_page():
@@ -71,7 +72,7 @@ def afficher_pdfs_selectbox(df):
                 if st.button("Fermer le PDF", key="carte_pdf_close_button"):
                     # Réinitialiser la sélection
                     st.session_state.carte_pdf_selectbox = None
-                    st.rerun()
+                    #st.rerun()
     else:
         st.info("Aucun hébergement avec document PDF disponible.")
 
@@ -192,7 +193,7 @@ def creer_editeur_donnees(df):
                 if checked_row_idx in df.index and pd.notna(df.loc[checked_row_idx, "Lien"]):
                     st.session_state.pdf_a_ouvrir = df.loc[checked_row_idx, "Lien"]
                     st.session_state.previous_checked_idx = checked_row_idx
-                    st.rerun()  # Recharger la page pour afficher le PDF
+                    #st.rerun()  # Recharger la page pour afficher le PDF
 
             # Décocher toutes les autres checkboxes
             for idx in edited_df.index:
@@ -204,7 +205,7 @@ def creer_editeur_donnees(df):
             # Si l'utilisateur a décoché la case, fermer le PDF
             st.session_state.pdf_a_ouvrir = None
             st.session_state.previous_checked_idx = None
-            st.rerun()  # Recharger la page pour fermer le PDF
+            #st.rerun()  # Recharger la page pour fermer le PDF
 
     # Afficher le PDF sélectionné
     if st.session_state.pdf_a_ouvrir:
@@ -219,7 +220,7 @@ def creer_editeur_donnees(df):
                 # C'est pourquoi nous utilisons previous_checked_idx pour suivre l'état
                 if "Afficher PDF" in edited_df.columns:
                     edited_df["Afficher PDF"] = False
-                st.rerun()
+                #st.rerun()
 
     return edited_df, df_visible, adresses_actuelles
 
@@ -247,7 +248,7 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
         # Sauvegarder immédiatement pour les nouvelles lignes
         df = df.sort_values(by="Nuit").reset_index(drop=True)
 
-        _, _, _, df = calculate_routes_graphhopper(df)
+        _, _, _, df = calculate_routes(df)
 
         sauvegarder_donnees(df, nom_fichier=uploaded_file)
         st.success("✅ Nouvelles lignes ajoutées avec succès!")
@@ -301,7 +302,7 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
 
                 # Recalculer les routes et distances pour tout le DataFrame
                 with st.spinner("Recalcul des itinéraires et des distances..."):
-                    distances_list, durations, route_geoms, df_updated = calculate_routes_graphhopper(df)
+                    distances_list, durations, route_geoms, df_updated = calculate_routes(df)
                     # Mettre à jour le DataFrame avec les résultats recalculés
                     df = df_updated
 
@@ -315,7 +316,6 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
             distance_totale_maj = df["Distance (km)"].sum(skipna=True)
 
             st.success("✅ Modifications appliquées avec succès!")
-            st.sidebar.write(f"**Distance totale mise à jour :** {distance_totale_maj:.2f} km")
         else:
             st.info("Aucune modification détectée.")
 
