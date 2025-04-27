@@ -9,7 +9,9 @@ from streamlit_pdf_viewer import pdf_viewer
 
 
 @st.cache_data
-def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"):
+def charger_donnees(
+    nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"
+):
     """
     Fonction pour charger des données depuis un dépôt GitHub privé.
 
@@ -38,14 +40,16 @@ def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None
             buffer = BytesIO(decoded_content)
 
             # Convertir selon le format demandé
-            if format == 'parquet':
+            if format == "parquet":
                 return pd.read_parquet(buffer)
             else:
                 buffer.seek(0)
                 return buffer
 
         except Exception as e:
-            st.warning(f"Erreur lors de l'accès au fichier {nom_fichier} sur la branche {branche}: {e}")
+            st.warning(
+                f"Erreur lors de l'accès au fichier {nom_fichier} sur la branche {branche}: {e}"
+            )
             return None
 
     except Exception as e:
@@ -53,7 +57,9 @@ def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None
         return None
 
 
-def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des données", branche="main"):
+def sauvegarder_donnees(
+    contenu, nom_fichier, message_commit="Mise à jour des données", branche="main"
+):
     """
     Fonction pour sauvegarder des données dans un dépôt GitHub privé sans créer de copie locale.
 
@@ -75,9 +81,9 @@ def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des d
         if isinstance(contenu, pd.DataFrame):
             # Pour un DataFrame pandas
             buffer = BytesIO()
-            if nom_fichier.endswith('.parquet'):
+            if nom_fichier.endswith(".parquet"):
                 contenu.to_parquet(buffer, index=False)
-            elif nom_fichier.endswith('.csv'):
+            elif nom_fichier.endswith(".csv"):
                 contenu.to_csv(buffer, index=False)
             else:
                 contenu.to_csv(buffer, index=False)  # CSV par défaut
@@ -86,11 +92,11 @@ def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des d
 
         elif isinstance(contenu, dict) or isinstance(contenu, list):
             # Pour un dictionnaire ou une liste (format JSON)
-            github_content = json.dumps(contenu).encode('utf-8')
+            github_content = json.dumps(contenu).encode("utf-8")
 
         elif isinstance(contenu, str):
             # Pour une chaîne de caractères
-            github_content = contenu.encode('utf-8')
+            github_content = contenu.encode("utf-8")
 
         elif isinstance(contenu, bytes):
             # Pour des données binaires
@@ -118,7 +124,7 @@ def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des d
                 message=message_commit,
                 content=github_content,
                 sha=contents.sha,
-                branch=branche
+                branch=branche,
             )
         except GithubException as e:
             if e.status == 404:
@@ -127,13 +133,13 @@ def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des d
                     path=nom_fichier,
                     message=message_commit,
                     content=github_content,
-                    branch=branche
+                    branch=branche,
                 )
             else:
                 raise e
 
         # Invalider le cache pour forcer un rechargement des données
-        if 'charger_donnees' in globals() and hasattr(charger_donnees, 'clear'):
+        if "charger_donnees" in globals() and hasattr(charger_donnees, "clear"):
             charger_donnees.clear()
 
         st.success(f"✅ Fichier {nom_fichier} sauvegardé sur GitHub")
@@ -142,6 +148,7 @@ def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des d
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde sur GitHub: {e}")
         import traceback
+
         st.error(traceback.format_exc())
         return False
 
@@ -153,8 +160,8 @@ def identifier_sejours_multiples(df):
     df_avec_duree = df.copy()
 
     # Initialiser les colonnes pour la durée du séjour et la date de fin
-    df_avec_duree['Duree_Sejour'] = 1
-    df_avec_duree['Date_Fin'] = None
+    df_avec_duree["Duree_Sejour"] = 1
+    df_avec_duree["Date_Fin"] = None
 
     # Première passe pour identifier les groupes de séjour
     groupes_sejour = []
@@ -165,9 +172,16 @@ def identifier_sejours_multiples(df):
         dernier_index = groupe_actuel[-1]
 
         # Vérifier si l'adresse actuelle est la même que celle du dernier élément du groupe
-        meme_adresse = df_avec_duree.iloc[dernier_index]['Adresse'] == df_avec_duree.iloc[i]['Adresse']
-        memes_coords = (df_avec_duree.iloc[dernier_index]['Latitude'] == df_avec_duree.iloc[i]['Latitude'] and
-                        df_avec_duree.iloc[dernier_index]['Longitude'] == df_avec_duree.iloc[i]['Longitude'])
+        meme_adresse = (
+            df_avec_duree.iloc[dernier_index]["Adresse"]
+            == df_avec_duree.iloc[i]["Adresse"]
+        )
+        memes_coords = (
+            df_avec_duree.iloc[dernier_index]["Latitude"]
+            == df_avec_duree.iloc[i]["Latitude"]
+            and df_avec_duree.iloc[dernier_index]["Longitude"]
+            == df_avec_duree.iloc[i]["Longitude"]
+        )
 
         if meme_adresse or memes_coords:
             # Même endroit, ajouter à ce groupe
@@ -187,12 +201,14 @@ def identifier_sejours_multiples(df):
             dernier_index = groupe[-1]
 
             # Mettre à jour le premier élément du groupe
-            df_avec_duree.at[premier_index, 'Duree_Sejour'] = len(groupe)
-            df_avec_duree.at[premier_index, 'Date_Fin'] = df_avec_duree.iloc[dernier_index]['Nuit']
+            df_avec_duree.at[premier_index, "Duree_Sejour"] = len(groupe)
+            df_avec_duree.at[premier_index, "Date_Fin"] = df_avec_duree.iloc[
+                dernier_index
+            ]["Nuit"]
 
             # Marquer les autres éléments du groupe comme à fusionner
             for i in groupe[1:]:
-                df_avec_duree.at[i, 'Duree_Sejour'] = -1
+                df_avec_duree.at[i, "Duree_Sejour"] = -1
 
     return df_avec_duree
 
@@ -222,7 +238,9 @@ def charger_routes_existantes(df):
     # Parcourir le DataFrame pour extraire les informations existantes
     for i in range(len(df) - 1):  # On parcourt jusqu'à l'avant-dernier point
         # Récupérer les valeurs existantes
-        distance = df.iloc[i]["Distance (km)"] if "Distance (km)" in df.columns else None
+        distance = (
+            df.iloc[i]["Distance (km)"] if "Distance (km)" in df.columns else None
+        )
         duration = df.iloc[i]["Durée (h)"] if "Durée (h)" in df.columns else None
 
         # Récupérer les coordonnées du chemin
@@ -264,7 +282,7 @@ def ouvrir_pdf(chemin_pdf, use_expander=False):
         return
 
     # Récupérer les données binaires du PDF
-    if hasattr(contenu_pdf, 'read'):
+    if hasattr(contenu_pdf, "read"):
         contenu_pdf.seek(0)
         pdf_data = contenu_pdf.read()
     else:

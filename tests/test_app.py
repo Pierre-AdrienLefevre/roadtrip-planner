@@ -12,6 +12,7 @@ def test_app_file_exists():
     # de la structure de votre code
     try:
         import app
+
         assert True
     except ImportError as e:
         # Si l'import échoue à cause d'autres dépendances manquantes en test,

@@ -88,23 +88,23 @@ def initialiser_carte(start_lat, start_lon):
         zoom_start=6,
         tiles=None,
         width="100%",
-        height="100%"
+        height="100%",
     )
 
     mapbox_token = st.secrets["mapbox"]["token"]
 
     # Ajouter la couche satellite Mapbox
     folium.TileLayer(
-        tiles=f'https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{{z}}/{{x}}/{{y}}?access_token={mapbox_token}',
+        tiles=f"https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{{z}}/{{x}}/{{y}}?access_token={mapbox_token}",
         name="Satellite",
-        attr='© Mapbox © OpenStreetMap',
+        attr="© Mapbox © OpenStreetMap",
     ).add_to(m)
 
     # Ajouter la couche outdoors Mapbox
     folium.TileLayer(
-        tiles=f'https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/tiles/{{z}}/{{x}}/{{y}}?access_token={mapbox_token}',
+        tiles=f"https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/tiles/{{z}}/{{x}}/{{y}}?access_token={mapbox_token}",
         name="Carte Outdoor",
-        attr='© Mapbox © OpenStreetMap',
+        attr="© Mapbox © OpenStreetMap",
     ).add_to(m)
 
     return m
@@ -118,15 +118,23 @@ def ajouter_routes(m, df, distances=None, durations=None):
             if route_coords:
                 # Déterminer si c'est un déplacement à pied
                 is_marche = False
-                if "Type_Deplacement" in df.columns and pd.notna(df.iloc[i]["Type_Deplacement"]):
+                if "Type_Deplacement" in df.columns and pd.notna(
+                    df.iloc[i]["Type_Deplacement"]
+                ):
                     is_marche = df.iloc[i]["Type_Deplacement"].lower() == "marche"
 
                 # Calculer la distance et la durée
                 distance_text = ""
                 duration_text = ""
-                if "Distance (km)" in df.columns and pd.notna(df.iloc[i]["Distance (km)"]):
+                if "Distance (km)" in df.columns and pd.notna(
+                    df.iloc[i]["Distance (km)"]
+                ):
                     distance_text = f"{df.iloc[i]['Distance (km)']:.2f} km"
-                elif distances is not None and i < len(distances) and pd.notna(distances[i]):
+                elif (
+                    distances is not None
+                    and i < len(distances)
+                    and pd.notna(distances[i])
+                ):
                     distance_text = f"{(distances[i] / 1000):.2f} km"
 
                 if "Durée (h)" in df.columns and pd.notna(df.iloc[i]["Durée (h)"]):
@@ -135,7 +143,11 @@ def ajouter_routes(m, df, distances=None, durations=None):
                     heures = int(duree_heures)
                     minutes = int((duree_heures - heures) * 60)
                     duration_text = f"{heures}h{minutes:02d}"
-                elif durations is not None and i < len(durations) and pd.notna(durations[i]):
+                elif (
+                    durations is not None
+                    and i < len(durations)
+                    and pd.notna(durations[i])
+                ):
                     duree_heures = durations[i]
                     heures = int(duree_heures)
                     minutes = int((duree_heures - heures) * 60)
@@ -156,7 +168,7 @@ def ajouter_routes(m, df, distances=None, durations=None):
                     weight=4,
                     opacity=0.8,
                     tooltip=tooltip,
-                    dash_array=dash_array  # Ligne pointillée pour la marche
+                    dash_array=dash_array,  # Ligne pointillée pour la marche
                 )
                 route.add_to(m)
 
@@ -170,13 +182,17 @@ def determiner_type_point(i, row, df, icons, colors, duree_sejour, type_hebergem
         icon = icons["depart"]
         title = "Point de départ"
         color = colors["départ"]
-    elif i == len(df) - 1 or (row["Adresse"] == df.iloc[-1]["Adresse"] if "Adresse" in row else False):
+    elif i == len(df) - 1 or (
+        row["Adresse"] == df.iloc[-1]["Adresse"] if "Adresse" in row else False
+    ):
         point_type = "arrivée"
         icon = icons["arrivee"]
         title = "Point d'arrivée"
         color = colors["arrivée"]
     # Traitement pour les activités basé sur Type_Hebergement
-    elif type_hebergement.lower() == "activité" or type_hebergement.lower() == "activite":
+    elif (
+        type_hebergement.lower() == "activité" or type_hebergement.lower() == "activite"
+    ):
         point_type = "activité"
         icon = icons["activite"]
         title = "Point d'activité"
@@ -218,12 +234,7 @@ def determiner_type_point(i, row, df, icons, colors, duree_sejour, type_hebergem
         # La couleur est déterminée uniquement par la durée du séjour
         color = colors[point_type]
 
-    return {
-        "point_type": point_type,
-        "icon": icon,
-        "title": title,
-        "color": color
-    }
+    return {"point_type": point_type, "icon": icon, "title": title, "color": color}
 
 
 def creer_html_popup(ville, date_info, nom, type_heb, prix, title, color):
@@ -265,12 +276,21 @@ def ajouter_marqueurs(m, df_avec_duree, df, icons, colors):
             continue
 
         # Déterminer le type d'hébergement et le nombre de nuits
-        duree_sejour = row["Duree_Sejour"] if "Duree_Sejour" in row and pd.notna(row["Duree_Sejour"]) else 0
-        type_hebergement = row["Type_Hebergement"] if "Type_Hebergement" in row and pd.notna(
-            row["Type_Hebergement"]) else ""
+        duree_sejour = (
+            row["Duree_Sejour"]
+            if "Duree_Sejour" in row and pd.notna(row["Duree_Sejour"])
+            else 0
+        )
+        type_hebergement = (
+            row["Type_Hebergement"]
+            if "Type_Hebergement" in row and pd.notna(row["Type_Hebergement"])
+            else ""
+        )
 
         # Déterminer le type de point et ses caractéristiques
-        point_info = determiner_type_point(i, row, df, icons, colors, duree_sejour, type_hebergement)
+        point_info = determiner_type_point(
+            i, row, df, icons, colors, duree_sejour, type_hebergement
+        )
 
         # Si point_info est None, c'est un point de passage à ignorer
         if point_info is None:
@@ -285,14 +305,18 @@ def ajouter_marqueurs(m, df_avec_duree, df, icons, colors):
 
         # Créer le contenu de la popup
         html_content = creer_html_popup(
-            ville, date_info, nom, type_heb, prix,
-            point_info["title"], point_info["color"]
+            ville,
+            date_info,
+            nom,
+            type_heb,
+            prix,
+            point_info["title"],
+            point_info["color"],
         )
 
         # Créer le texte du tooltip
         tooltip_text = creer_tooltip(
-            point_info["point_type"], ville, date_info,
-            type_hebergement, duree_sejour
+            point_info["point_type"], ville, date_info, type_hebergement, duree_sejour
         )
 
         # Ajouter le marqueur
@@ -300,7 +324,7 @@ def ajouter_marqueurs(m, df_avec_duree, df, icons, colors):
             location=[row["Latitude"], row["Longitude"]],
             popup=folium.Popup(html_content, max_width=300),
             tooltip=tooltip_text,
-            icon=point_info["icon"]
+            icon=point_info["icon"],
         ).add_to(m)
 
     return m

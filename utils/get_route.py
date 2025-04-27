@@ -12,7 +12,9 @@ def add_lat_lon(df, address_column="Adresse"):
     try:
         api_key = st.secrets["opencage"]["api_key"]
     except KeyError:
-        st.error("Clé API OpenCage manquante. Vérifiez le fichier .streamlit/secrets.toml.")
+        st.error(
+            "Clé API OpenCage manquante. Vérifiez le fichier .streamlit/secrets.toml."
+        )
         return df
 
     geocoder = OpenCageGeocode(api_key)
@@ -81,16 +83,20 @@ def get_route(start_coords, end_coords, type_deplacement="Marche"):
         return distance
 
     # Calculer la distance directe
-    direct_distance = haversine_distance(start_coords[0], start_coords[1], end_coords[0], end_coords[1])
+    direct_distance = haversine_distance(
+        start_coords[0], start_coords[1], end_coords[0], end_coords[1]
+    )
 
     # Si les points sont très proches (moins de 50m), connecter directement
     if direct_distance <= 50:  # 50 mètres comme seuil
-        print(f"Points très proches ({direct_distance:.2f}m), création d'une ligne directe")
+        print(
+            f"Points très proches ({direct_distance:.2f}m), création d'une ligne directe"
+        )
 
         # Créer un itinéraire simple avec juste les deux points
         route_coords = [
             [start_coords[0], start_coords[1]],
-            [end_coords[0], end_coords[1]]
+            [end_coords[0], end_coords[1]],
         ]
 
         # Estimer la durée (pour la randonnée: ~3.5 km/h)
@@ -102,7 +108,9 @@ def get_route(start_coords, end_coords, type_deplacement="Marche"):
 
     # Déterminer le profil ORS en fonction du type de déplacement
     if not isinstance(type_deplacement, str):
-        print(f"Type de déplacement invalide: {type_deplacement} (type: {type(type_deplacement)})")
+        print(
+            f"Type de déplacement invalide: {type_deplacement} (type: {type(type_deplacement)})"
+        )
         return None, None, None
 
     if type_deplacement == "Marche":
@@ -123,16 +131,16 @@ def get_route(start_coords, end_coords, type_deplacement="Marche"):
     body = {
         "coordinates": [
             [start_coords[1], start_coords[0]],  # [lon, lat]
-            [end_coords[1], end_coords[0]]  # [lon, lat]
+            [end_coords[1], end_coords[0]],  # [lon, lat]
         ],
         "format": "json",
         "units": "km",
-        "language": "fr"
+        "language": "fr",
     }
 
     headers = {
-        'Authorization': api_key,
-        'Content-Type': 'application/json; charset=utf-8'
+        "Authorization": api_key,
+        "Content-Type": "application/json; charset=utf-8",
     }
 
     try:
@@ -146,13 +154,16 @@ def get_route(start_coords, end_coords, type_deplacement="Marche"):
 
             # Extraire les informations pertinentes
             distance_km = route["summary"]["distance"]  # Déjà en km
-            duration_hours = route["summary"]["duration"] / 3600  # Conversion de secondes en heures
+            duration_hours = (
+                route["summary"]["duration"] / 3600
+            )  # Conversion de secondes en heures
 
             # Extraire les coordonnées du chemin - ORS utilise format différent de GH
             geometry = route["geometry"]
             if isinstance(geometry, str):
                 # Si c'est encodé, décoder avec polyline
                 import polyline
+
                 route_coords = polyline.decode(geometry)
             else:
                 # Sinon, extraire directement
@@ -171,7 +182,7 @@ def get_route(start_coords, end_coords, type_deplacement="Marche"):
 
     except requests.exceptions.RequestException as e:
         print(f"Erreur lors de la requête OpenRouteService: {e}")
-        if 'response' in locals():
+        if "response" in locals():
             print(f"Réponse: {response.text}")
         return None, None, None
     except (KeyError, IndexError, ValueError) as e:
@@ -211,14 +222,18 @@ def calculate_routes(df):
         lat2, lon2 = df.iloc[i + 1]["Latitude"], df.iloc[i + 1]["Longitude"]
 
         # Récupérer le type de déplacement
-        if "Type_Deplacement" in df.columns and pd.notna(df.iloc[i]["Type_Deplacement"]):
+        if "Type_Deplacement" in df.columns and pd.notna(
+            df.iloc[i]["Type_Deplacement"]
+        ):
             type_deplacement = df.iloc[i]["Type_Deplacement"]
         else:
             print(f"Type de déplacement non spécifié pour le segment {i} à {i + 1}")
             type_deplacement = None
 
         # Vérifier si toutes les coordonnées sont valides
-        valid_coords = pd.notna(lat1) and pd.notna(lon1) and pd.notna(lat2) and pd.notna(lon2)
+        valid_coords = (
+            pd.notna(lat1) and pd.notna(lon1) and pd.notna(lat2) and pd.notna(lon2)
+        )
 
         # Créer une clé unique pour cette paire de coordonnées et type de déplacement
         if valid_coords and type_deplacement is not None:
@@ -228,43 +243,57 @@ def calculate_routes(df):
             if route_key in routes_cache:
                 distance, duration, route_coords = routes_cache[route_key]
             # Si déjà calculé dans le DataFrame et type de déplacement identique, on utilise cette valeur
-            elif pd.notna(df.iloc[i]["Chemin"]) and pd.notna(df.iloc[i]["Distance (km)"]):
+            elif pd.notna(df.iloc[i]["Chemin"]) and pd.notna(
+                df.iloc[i]["Distance (km)"]
+            ):
                 try:
                     route_coords = df.iloc[i]["Chemin"]
                     if isinstance(route_coords, str):
                         route_coords = json.loads(route_coords)
                     distance = df.iloc[i]["Distance (km)"]
-                    duration = df.iloc[i]["Durée (h)"] if pd.notna(df.iloc[i]["Durée (h)"]) else None
+                    duration = (
+                        df.iloc[i]["Durée (h)"]
+                        if pd.notna(df.iloc[i]["Durée (h)"])
+                        else None
+                    )
 
                     # Si la durée n'est pas disponible, on calcule l'itinéraire
                     if duration is None:
                         start_coords = (lat1, lon1)
                         end_coords = (lat2, lon2)
-                        distance, duration, route_coords = get_route(start_coords, end_coords,
-                                                                     type_deplacement)
+                        distance, duration, route_coords = get_route(
+                            start_coords, end_coords, type_deplacement
+                        )
                         # Mettre en cache
                         routes_cache[route_key] = (distance, duration, route_coords)
                 except Exception as e:
                     print(f"Erreur lors de la lecture du chemin à l'index {i}: {e}")
                     start_coords = (lat1, lon1)
                     end_coords = (lat2, lon2)
-                    distance, duration, route_coords = get_route(start_coords, end_coords, type_deplacement)
+                    distance, duration, route_coords = get_route(
+                        start_coords, end_coords, type_deplacement
+                    )
                     # Mettre en cache
                     routes_cache[route_key] = (distance, duration, route_coords)
             else:
                 # Sinon on calcule un nouveau tracé
                 start_coords = (lat1, lon1)
                 end_coords = (lat2, lon2)
-                distance, duration, route_coords = get_route(start_coords, end_coords, type_deplacement)
+                distance, duration, route_coords = get_route(
+                    start_coords, end_coords, type_deplacement
+                )
                 # Mettre en cache
                 routes_cache[route_key] = (distance, duration, route_coords)
         else:
             # Coordonnées invalides ou type de déplacement non défini
             if not valid_coords:
-                print(f"Coordonnées manquantes pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire.")
+                print(
+                    f"Coordonnées manquantes pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire."
+                )
             else:
                 print(
-                    f"Type de déplacement non défini pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire.")
+                    f"Type de déplacement non défini pour le segment {i} à {i + 1}, impossible de calculer l'itinéraire."
+                )
             distance = None
             duration = None
             route_coords = json.dumps([])
