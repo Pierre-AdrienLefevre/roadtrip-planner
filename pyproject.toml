@@ -16,13 +16,13 @@ dependencies = [
     "streamlit-pdf-viewer>=0.0.22",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 
 dev = [
-    "black~=24.3",
-    "isort~=5.13",
-    "flake8~=7.0",
-    "pytest~=8.0",
+    "black~=25.1",
+    "isort~=6.0",
+    "flake8~=7.2",
+    "pytest~=8.3.5",
 ]
 
 [tool.black]
