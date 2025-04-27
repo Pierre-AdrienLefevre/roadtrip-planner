@@ -1,5 +1,6 @@
-import folium
 import json
+
+import folium
 import pandas as pd
 import streamlit as st
 

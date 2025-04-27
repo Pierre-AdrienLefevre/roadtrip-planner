@@ -1007,6 +1007,7 @@ dependencies = [
     { name = "requests" },
     { name = "streamlit" },
     { name = "streamlit-folium" },
+    { name = "streamlit-pdf-viewer" },
 ]
 
 [package.dev-dependencies]
@@ -1027,6 +1028,7 @@ requires-dist = [
     { name = "requests", specifier = "~=2.32" },
     { name = "streamlit", specifier = "~=1.44" },
     { name = "streamlit-folium", specifier = "~=0.25" },
+    { name = "streamlit-pdf-viewer", specifier = ">=0.0.22" },
 ]
 
 [package.metadata.requires-dev]
@@ -1144,6 +1146,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e7/c9/4b96909cbc2c82859a962d68cdbc1f54a12dae4a828615bd302626489b2c/streamlit_folium-0.25.0.tar.gz", hash = "sha256:f32eb51c1958705030e15045a38edaf9c046d6de5e6587e64190251466a4a006", size = 330728 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/57/1d/4fb456ca29b58b4272672bbd80769ba114b21ccf39af2bf0531895f559bc/streamlit_folium-0.25.0-py3-none-any.whl", hash = "sha256:48d5f05ea3e9005c00c0b2fe5a9a3086df30d04e1a20c3630a6c9df183ec590a", size = 328445 },
+]
+
+[[package]]
+name = "streamlit-pdf-viewer"
+version = "0.0.22"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/85/fa/d74e73fa61aab82e68f8430fc90d2f78b42fd2110df6f955a687bcc5ce53/streamlit_pdf_viewer-0.0.22.tar.gz", hash = "sha256:274ba389f64db3ee9d36175abed31bb8b91f6ecc26ba6d1979b9a790a4ac89db", size = 2548154 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/54/eedf4f7173b7b1b3b05761a280212a1ffea0e9669ec2ec43d878866152d4/streamlit_pdf_viewer-0.0.22-py3-none-any.whl", hash = "sha256:f3c0af6d011ec1c58c7b70f2ee141d696fb52c936dd2446add99fdfab965402a", size = 2583325 },
 ]
 
 [[package]]

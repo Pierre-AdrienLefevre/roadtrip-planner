@@ -1,5 +1,6 @@
 import os
 import sys
+
 import pytest
 
 # Ajouter le répertoire racine du projet au chemin Python pour permettre

@@ -1,9 +1,10 @@
-from opencage.geocoder import OpenCageGeocode
-import streamlit as st
+import json
+from math import atan2, cos, radians, sin, sqrt
+
 import pandas as pd
 import requests
-import json
-from math import sin, cos, sqrt, atan2, radians
+import streamlit as st
+from opencage.geocoder import OpenCageGeocode
 
 
 def add_lat_lon(df, address_column="Adresse"):
@@ -181,7 +182,6 @@ def get_route(start_coords, end_coords, type_deplacement="Marche"):
 def calculate_routes(df):
     """Calcule les distances, durées et les trajets avec  si non enregistrés."""
 
-
     # Créer une copie du DataFrame pour éviter de modifier l'original
     df = df.copy()
 
@@ -241,7 +241,7 @@ def calculate_routes(df):
                         start_coords = (lat1, lon1)
                         end_coords = (lat2, lon2)
                         distance, duration, route_coords = get_route(start_coords, end_coords,
-                                                                                 type_deplacement)
+                                                                     type_deplacement)
                         # Mettre en cache
                         routes_cache[route_key] = (distance, duration, route_coords)
                 except Exception as e:
