@@ -7,11 +7,13 @@ import pytest
 # l'importation des modules du projet dans les tests
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+
 # Ces fixtures peuvent être utilisées dans vos tests
 @pytest.fixture
 def root_dir():
     """Retourne le répertoire racine du projet"""
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
 
 @pytest.fixture
 def utils_dir():

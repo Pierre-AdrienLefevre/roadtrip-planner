@@ -1,7 +1,5 @@
 import os
 
-import pytest
-
 
 def test_project_structure():
     """Vérifie que la structure du projet est correcte"""

@@ -1,16 +1,17 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
 from streamlit_folium import st_folium
+
 from utils.core import (
     charger_donnees,
-    sauvegarder_donnees,
+    charger_routes_existantes,
     identifier_sejours_multiples,
     ouvrir_pdf,
-    charger_routes_existantes
+    sauvegarder_donnees,
 )
+from utils.creer_carte import creer_carte
 from utils.get_route import calculate_routes
 
-from utils.creer_carte import creer_carte
 
 def configurer_page():
     """Configuration initiale de la page Streamlit"""
@@ -71,9 +72,10 @@ def afficher_pdfs_selectbox(df):
                 if st.button("Fermer le PDF", key="carte_pdf_close_button"):
                     # Réinitialiser la sélection
                     st.session_state.carte_pdf_selectbox = None
-                    #st.rerun()
+                    # st.rerun()
     else:
         st.info("Aucun hébergement avec document PDF disponible.")
+
 
 @st.cache_data()
 def afficher_recapitulatif_metrics(df, distance_totale=None, duree_totale=None):
@@ -203,7 +205,7 @@ def creer_editeur_donnees(df):
                 if checked_row_idx in df.index and pd.notna(df.loc[checked_row_idx, "Lien"]):
                     st.session_state.pdf_a_ouvrir = df.loc[checked_row_idx, "Lien"]
                     st.session_state.previous_checked_idx = checked_row_idx
-                    #st.rerun()  # Recharger la page pour afficher le PDF
+                    # st.rerun()  # Recharger la page pour afficher le PDF
 
             # Décocher toutes les autres checkboxes
             for idx in edited_df.index:
@@ -215,7 +217,7 @@ def creer_editeur_donnees(df):
             # Si l'utilisateur a décoché la case, fermer le PDF
             st.session_state.pdf_a_ouvrir = None
             st.session_state.previous_checked_idx = None
-            #st.rerun()  # Recharger la page pour fermer le PDF
+            # st.rerun()  # Recharger la page pour fermer le PDF
 
     # Afficher le PDF sélectionné
     if st.session_state.pdf_a_ouvrir:
@@ -230,7 +232,7 @@ def creer_editeur_donnees(df):
                 # C'est pourquoi nous utilisons previous_checked_idx pour suivre l'état
                 if "Afficher PDF" in edited_df.columns:
                     edited_df["Afficher PDF"] = False
-                #st.rerun()
+                # st.rerun()
 
     return edited_df, df_visible, adresses_actuelles
 
@@ -345,7 +347,7 @@ def main():
 
     with tab1:
         # Calculer les distances et les trajets
-        distances,durations, routes, df = charger_routes_existantes(df)
+        distances, durations, routes, df = charger_routes_existantes(df)
 
         # Identifier les séjours multiples
         df_avec_duree = identifier_sejours_multiples(df)
@@ -355,7 +357,7 @@ def main():
 
         # Créer et afficher la carte
         m = creer_carte(df, df_avec_duree, distances, durations)
-        st_folium(m, height=700, use_container_width= True, returned_objects=[])
+        st_folium(m, height=700, use_container_width=True, returned_objects=[])
 
         # Remplacer la fonction d'affichage d'emails par celle pour les PDF
         afficher_pdfs_selectbox(df)

@@ -1,10 +1,12 @@
-import streamlit as st
-import pandas as pd
 import base64
-from github import Github, GithubException
-from io import BytesIO
-from streamlit_pdf_viewer import pdf_viewer
 import json
+from io import BytesIO
+
+import pandas as pd
+import streamlit as st
+from github import Github, GithubException
+from streamlit_pdf_viewer import pdf_viewer
+
 
 @st.cache_data
 def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"):
@@ -194,6 +196,7 @@ def identifier_sejours_multiples(df):
 
     return df_avec_duree
 
+
 @st.cache_data
 def charger_routes_existantes(df):
     """
@@ -207,7 +210,6 @@ def charger_routes_existantes(df):
         distances, durations, routes, df
     """
     import json
-    import pandas as pd
 
     # Créer une copie du DataFrame pour éviter de modifier l'original
     df = df.copy()
@@ -246,15 +248,13 @@ def charger_routes_existantes(df):
     return distances, durations, routes, df
 
 
-def ouvrir_pdf(chemin_pdf, use_expander = False):
-
+def ouvrir_pdf(chemin_pdf, use_expander=False):
     """
     Affiche un PDF en utilisant streamlit-pdf-viewer
 
     Args:
         chemin_pdf: Chemin du fichier PDF dans le dépôt GitHub
     """
-    import os
 
     # Charger le fichier PDF depuis GitHub en utilisant votre fonction existante
     contenu_pdf = charger_donnees(nom_fichier=chemin_pdf, format="binary")
@@ -273,6 +273,6 @@ def ouvrir_pdf(chemin_pdf, use_expander = False):
     # Afficher le PDF avec streamlit-pdf-viewer
     pdf_viewer(
         input=pdf_data,  # Données binaires du PDF
-        width="100%",    # Utiliser toute la largeur disponible
-        render_text=True, # Activer la sélection de texte
+        width="100%",  # Utiliser toute la largeur disponible
+        render_text=True,  # Activer la sélection de texte
     )
