@@ -29,13 +29,13 @@ jobs:
 
       - name: Linter (isort, black, flake8)
         run: |
-          isort --check-only .
-          black --check .
-          flake8 .
+          uv run isort --check-only .
+          uv run black --check .
+          uv run flake8 .
 
       - name: Exécuter les tests
         run: |
-          python -m pytest tests/ -v
+          uv run pytest tests/ -v
 
   deploy:
     needs: lint-and-test
