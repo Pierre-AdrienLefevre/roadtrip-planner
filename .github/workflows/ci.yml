@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, new_features ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Installer UV
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Ajouter UV au PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Installer les dépendances
+        run: uv sync --locked --all-extras --dev
+
+  deploy:
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Installer UV
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Ajouter UV au PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Deploy to Streamlit Cloud
+        run: |
+          # Streamlit déploie automatiquement depuis GitHub
+          # Cette étape peut simplement indiquer un déploiement réussi
+          echo "Le déploiement vers Streamlit Cloud se fait automatiquement depuis le repo GitHub."
