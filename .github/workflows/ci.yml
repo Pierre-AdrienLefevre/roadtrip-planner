@@ -27,6 +27,16 @@ jobs:
       - name: Installer les dépendances
         run: uv sync --group dev
 
+      - name: Linter (isort, black, flake8)
+        run: |
+          isort --check-only .
+          black --check .
+          flake8 .
+
+      - name: Exécuter les tests
+        run: |
+          python -m pytest tests/ -v
+
   deploy:
     needs: lint-and-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -45,6 +55,9 @@ jobs:
 
       - name: Ajouter UV au PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Installer les dépendances
+        run: uv sync
 
       - name: Deploy to Streamlit Cloud
         run: |
