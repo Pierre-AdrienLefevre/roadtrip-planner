@@ -21,7 +21,8 @@ def configurer_page():
 
 def afficher_pdfs_selectbox(df):
     """
-    Affiche une liste déroulante pour sélectionner un hébergement et voir son PDF automatiquement
+    Affiche une liste déroulante pour sélectionner un hébergement
+    et voir son PDF automatiquement
 
     Args:
         df: DataFrame contenant les données des hébergements avec les liens de PDF
@@ -65,7 +66,8 @@ def afficher_pdfs_selectbox(df):
         if selected_option:
             pdf_link = pdf_links[selected_option]
             with st.expander("Document PDF", expanded=True):
-                # Appeler ouvrir_pdf avec use_expander=False pour éviter l'imbrication d'expanders
+                # Appeler ouvrir_pdf avec use_expander=False pour éviter
+                # l'imbrication d'expanders
                 ouvrir_pdf(pdf_link, use_expander=False)
 
                 # Ajouter un bouton pour fermer le PDF si nécessaire
@@ -79,8 +81,9 @@ def afficher_pdfs_selectbox(df):
 
 @st.cache_data()
 def afficher_recapitulatif_metrics(df, distance_totale=None, duree_totale=None):
-    """Affiche le récapitulatif du budget, de la distance et de la durée en utilisant st.metrics
-    en excluant les déplacements à pied des calculs de distance et durée"""
+    """Affiche le récapitulatif du budget, de la distance
+    et de la durée en utilisant st.metrics en excluant les déplacements
+    à pied des calculs de distance et durée"""
 
     # Créer une ligne avec trois colonnes pour les métriques
     col1, col2, col3 = st.columns(3)
@@ -100,9 +103,7 @@ def afficher_recapitulatif_metrics(df, distance_totale=None, duree_totale=None):
             distance_totale = df["Distance (km)"].sum(skipna=True)
 
     with col2:
-        st.metric(
-            label="🚗 Distance totale en véhicule", value=f"{distance_totale:.2f} km"
-        )
+        st.metric(label="🚗 Distance totale en véhicule", value=f"{distance_totale:.2f} km")
 
     # Calculer la durée totale en excluant les déplacements à pied
     if duree_totale is None and "Durée (h)" in df.columns:
@@ -117,9 +118,7 @@ def afficher_recapitulatif_metrics(df, distance_totale=None, duree_totale=None):
         heures = int(duree_totale)
         minutes = int((duree_totale - heures) * 60)
         with col3:
-            st.metric(
-                label="⏱️ Temps total de conduite", value=f"{heures}h{minutes:02d}"
-            )
+            st.metric(label="⏱️ Temps total de conduite", value=f"{heures}h{minutes:02d}")
 
 
 def creer_editeur_donnees(df):
@@ -142,11 +141,7 @@ def creer_editeur_donnees(df):
     df_visible = df.drop(columns=colonnes_cachees, errors="ignore")
 
     # Sauvegarde d'une copie des adresses actuelles
-    adresses_actuelles = (
-        df_visible["Adresse"].copy()
-        if "Adresse" in df_visible.columns
-        else pd.Series([])
-    )
+    adresses_actuelles = df_visible["Adresse"].copy() if "Adresse" in df_visible.columns else pd.Series([])
 
     # Ajouter une colonne de checkbox pour les PDF
     if "Lien" in df.columns:
@@ -155,14 +150,9 @@ def creer_editeur_donnees(df):
         df_visible["Afficher PDF"] = False
 
         # Si un PDF est ouvert, cocher la case correspondante
-        if (
-            st.session_state.pdf_a_ouvrir is not None
-            and st.session_state.previous_checked_idx is not None
-        ):
+        if st.session_state.pdf_a_ouvrir is not None and st.session_state.previous_checked_idx is not None:
             if st.session_state.previous_checked_idx in df_visible.index:
-                df_visible.loc[
-                    st.session_state.previous_checked_idx, "Afficher PDF"
-                ] = True
+                df_visible.loc[st.session_state.previous_checked_idx, "Afficher PDF"] = True
 
         # Réorganiser les colonnes pour avoir Afficher PDF en premier et Lien en dernier
         cols = list(df_visible.columns)
@@ -182,16 +172,12 @@ def creer_editeur_donnees(df):
 
     # Configuration des colonnes pour l'éditeur
     column_config = {
-        "Afficher PDF": st.column_config.CheckboxColumn(
-            "📄", help="Cocher pour afficher le PDF"
-        ),
+        "Afficher PDF": st.column_config.CheckboxColumn("📄", help="Cocher pour afficher le PDF"),
         "Adresse": st.column_config.TextColumn("Adresse", width="large"),
         "Ville": st.column_config.TextColumn("Ville", width="medium"),
         "Nom": st.column_config.TextColumn("Hébergement", width="medium"),
         "Prix": st.column_config.NumberColumn("Prix ($)", format="%.2f", width="small"),
-        "Nuit": st.column_config.DatetimeColumn(
-            "Nuit", width="small", format="HH[h] DD/MM"
-        ),
+        "Nuit": st.column_config.DatetimeColumn("Nuit", width="small", format="HH[h] DD/MM"),
         "Lien": st.column_config.TextColumn("Lien", width="small"),
     }
 
@@ -208,21 +194,16 @@ def creer_editeur_donnees(df):
     # Traiter les changements de checkbox
     if "Lien" in df.columns and "Afficher PDF" in edited_df.columns:
         # Identifier les lignes avec checkbox cochée
-        pdf_checked_rows = edited_df[edited_df["Afficher PDF"] == True]
+        pdf_checked_rows = edited_df[edited_df["Afficher PDF"] is True]
 
         # Si une nouvelle checkbox est cochée
         if not pdf_checked_rows.empty:
             checked_row_idx = pdf_checked_rows.index[0]
 
             # Si c'est une nouvelle ligne cochée ou si aucun PDF n'est actuellement ouvert
-            if (
-                checked_row_idx != st.session_state.previous_checked_idx
-                or st.session_state.pdf_a_ouvrir is None
-            ):
+            if checked_row_idx != st.session_state.previous_checked_idx or st.session_state.pdf_a_ouvrir is None:
                 # Récupérer le lien de PDF correspondant
-                if checked_row_idx in df.index and pd.notna(
-                    df.loc[checked_row_idx, "Lien"]
-                ):
+                if checked_row_idx in df.index and pd.notna(df.loc[checked_row_idx, "Lien"]):
                     st.session_state.pdf_a_ouvrir = df.loc[checked_row_idx, "Lien"]
                     st.session_state.previous_checked_idx = checked_row_idx
                     # st.rerun()  # Recharger la page pour afficher le PDF
@@ -275,9 +256,7 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
                     nouvelle_ligne_complete[col] = nouvelle_ligne[col]
 
             # Ajouter la nouvelle ligne au DataFrame principal
-            df = pd.concat(
-                [df, pd.DataFrame([nouvelle_ligne_complete])], ignore_index=True
-            )
+            df = pd.concat([df, pd.DataFrame([nouvelle_ligne_complete])], ignore_index=True)
 
         # Sauvegarder immédiatement pour les nouvelles lignes
         df = df.sort_values(by="Nuit").reset_index(drop=True)
@@ -332,15 +311,11 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
 
         if modifications_detectees:
             if routes_a_recalculer:
-                st.info(
-                    f"Recalcul des routes pour les indices : {sorted(routes_a_recalculer)}"
-                )
+                st.info(f"Recalcul des routes pour les indices : {sorted(routes_a_recalculer)}")
 
                 # Recalculer les routes et distances pour tout le DataFrame
                 with st.spinner("Recalcul des itinéraires et des distances..."):
-                    distances_list, durations, route_geoms, df_updated = (
-                        calculate_routes(df)
-                    )
+                    distances_list, durations, route_geoms, df_updated = calculate_routes(df)
                     # Mettre à jour le DataFrame avec les résultats recalculés
                     df = df_updated
 
@@ -349,9 +324,6 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
 
             # Sauvegarder le DataFrame mis à jour
             sauvegarder_donnees(df, nom_fichier=uploaded_file)
-
-            # Calculer la distance totale mise à jour
-            distance_totale_maj = df["Distance (km)"].sum(skipna=True)
 
             st.success("✅ Modifications appliquées avec succès!")
         else:
@@ -397,9 +369,7 @@ def main():
 
         # Bouton pour appliquer les modifications
         if st.button("🔄 Appliquer les modifications"):
-            traiter_modifications(
-                edited_df, df_visible, df, adresses_actuelles, uploaded_file
-            )
+            traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file)
 
 
 if __name__ == "__main__":

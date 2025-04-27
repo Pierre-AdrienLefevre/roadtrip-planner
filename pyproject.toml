@@ -21,12 +21,11 @@ dependencies = [
 dev = [
     "black~=25.1",
     "isort~=6.0",
-    "flake8~=7.2",
     "pytest~=8.3.5",
 ]
 
 [tool.black]
-line-length = 88
+line-length = 120
 target-version = ["py312"]
 exclude = '''
 (
@@ -44,7 +43,7 @@ exclude = '''
 
 [tool.isort]
 profile = "black"
-line_length = 88
+line_length = 120
 skip_glob = [".venv/*", "__pycache__/*", "*.egg", "*.egg-info/*", "build/*", "dist/*"]
 
 [tool.pytest]

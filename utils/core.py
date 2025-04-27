@@ -9,9 +9,7 @@ from streamlit_pdf_viewer import pdf_viewer
 
 
 @st.cache_data
-def charger_donnees(
-    nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"
-):
+def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"):
     """
     Fonction pour charger des données depuis un dépôt GitHub privé.
 
@@ -47,9 +45,7 @@ def charger_donnees(
                 return buffer
 
         except Exception as e:
-            st.warning(
-                f"Erreur lors de l'accès au fichier {nom_fichier} sur la branche {branche}: {e}"
-            )
+            st.warning(f"Erreur lors de l'accès au fichier {nom_fichier} sur la branche {branche}: {e}")
             return None
 
     except Exception as e:
@@ -57,9 +53,7 @@ def charger_donnees(
         return None
 
 
-def sauvegarder_donnees(
-    contenu, nom_fichier, message_commit="Mise à jour des données", branche="main"
-):
+def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des données", branche="main"):
     """
     Fonction pour sauvegarder des données dans un dépôt GitHub privé sans créer de copie locale.
 
@@ -171,16 +165,12 @@ def identifier_sejours_multiples(df):
         # Comparer avec le dernier élément du groupe actuel
         dernier_index = groupe_actuel[-1]
 
-        # Vérifier si l'adresse actuelle est la même que celle du dernier élément du groupe
-        meme_adresse = (
-            df_avec_duree.iloc[dernier_index]["Adresse"]
-            == df_avec_duree.iloc[i]["Adresse"]
-        )
+        # Vérifier si l'adresse actuelle est la même
+        # que celle du dernier élément du groupe
+        meme_adresse = df_avec_duree.iloc[dernier_index]["Adresse"] == df_avec_duree.iloc[i]["Adresse"]
         memes_coords = (
-            df_avec_duree.iloc[dernier_index]["Latitude"]
-            == df_avec_duree.iloc[i]["Latitude"]
-            and df_avec_duree.iloc[dernier_index]["Longitude"]
-            == df_avec_duree.iloc[i]["Longitude"]
+            df_avec_duree.iloc[dernier_index]["Latitude"] == df_avec_duree.iloc[i]["Latitude"]
+            and df_avec_duree.iloc[dernier_index]["Longitude"] == df_avec_duree.iloc[i]["Longitude"]
         )
 
         if meme_adresse or memes_coords:
@@ -202,9 +192,7 @@ def identifier_sejours_multiples(df):
 
             # Mettre à jour le premier élément du groupe
             df_avec_duree.at[premier_index, "Duree_Sejour"] = len(groupe)
-            df_avec_duree.at[premier_index, "Date_Fin"] = df_avec_duree.iloc[
-                dernier_index
-            ]["Nuit"]
+            df_avec_duree.at[premier_index, "Date_Fin"] = df_avec_duree.iloc[dernier_index]["Nuit"]
 
             # Marquer les autres éléments du groupe comme à fusionner
             for i in groupe[1:]:
@@ -238,9 +226,7 @@ def charger_routes_existantes(df):
     # Parcourir le DataFrame pour extraire les informations existantes
     for i in range(len(df) - 1):  # On parcourt jusqu'à l'avant-dernier point
         # Récupérer les valeurs existantes
-        distance = (
-            df.iloc[i]["Distance (km)"] if "Distance (km)" in df.columns else None
-        )
+        distance = df.iloc[i]["Distance (km)"] if "Distance (km)" in df.columns else None
         duration = df.iloc[i]["Durée (h)"] if "Durée (h)" in df.columns else None
 
         # Récupérer les coordonnées du chemin
