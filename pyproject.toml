@@ -15,3 +15,23 @@ dependencies = [
     "streamlit-folium~=0.25",
     "streamlit-pdf-viewer>=0.0.22",
 ]
+
+[project.optional-dependencies]
+
+dev = [
+    "black~=24.3",
+    "isort~=5.13",
+    "flake8~=7.0",
+    "pytest~=8.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.pytest]
+testpaths = ["tests"]

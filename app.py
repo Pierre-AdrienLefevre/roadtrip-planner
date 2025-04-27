@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from streamlit_folium import st_folium
-from core import (
+from utils.core import (
     charger_donnees,
     sauvegarder_donnees,
     identifier_sejours_multiples,
