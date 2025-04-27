@@ -28,10 +28,28 @@ dev = [
 [tool.black]
 line-length = 88
 target-version = ["py312"]
+exclude = '''
+(
+  \.git
+  | \.venv
+  | __pycache__
+  | venv
+  | env
+  | \.eggs
+  | .*\.egg
+  | build
+  | dist
+)
+'''
 
 [tool.isort]
 profile = "black"
 line_length = 88
+skip_glob = [".venv/*", "__pycache__/*", "*.egg", "*.egg-info/*", "build/*", "dist/*"]
 
 [tool.pytest]
 testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+
+
