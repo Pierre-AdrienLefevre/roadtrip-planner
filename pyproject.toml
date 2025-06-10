@@ -5,15 +5,15 @@ description = "Road Trip Planner"
 readme = "README.md"
 requires-python = "~=3.12"
 dependencies = [
-    "folium~=0.19",
-    "opencage~=3.1",
-    "pandas~=2.2",
+    "folium~=0.19.7",
+    "opencage~=3.2",
+    "pandas~=2.3",
     "polyline~=2.0",
     "pygithub~=2.6",
-    "requests~=2.32",
-    "streamlit~=1.44",
+    "requests~=2.32.4",
+    "streamlit~=1.45",
     "streamlit-folium~=0.25",
-    "streamlit-pdf-viewer>=0.0.22",
+    "streamlit-pdf-viewer>=0.0.24",
 ]
 
 [dependency-groups]
@@ -21,7 +21,7 @@ dependencies = [
 dev = [
     "black~=25.1",
     "isort~=6.0",
-    "pytest~=8.3.5",
+    "pytest~=8.4",
 ]
 
 [tool.black]
