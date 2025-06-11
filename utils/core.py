@@ -8,8 +8,51 @@ from github import Github, GithubException
 from streamlit_pdf_viewer import pdf_viewer
 
 
+def appliquer_types_colonnes(df):
+    """
+    Applique les bons types de données aux colonnes du DataFrame
+    """
+    try:
+        # Conversion de la colonne Nuit en datetime
+        if "Nuit" in df.columns:
+            df["Nuit"] = pd.to_datetime(df["Nuit"], errors="coerce")
+
+        # Colonnes texte
+        colonnes_texte = ["Ville", "Nom", "Adresse", "Lien", "Type_Hebergement", "Type_Deplacement"]
+        for col in colonnes_texte:
+            if col in df.columns:
+                df[col] = df[col].astype("string")
+
+        # Colonnes numériques
+        if "Prix" in df.columns:
+            df["Prix"] = pd.to_numeric(df["Prix"], errors="coerce")
+
+        if "Longitude" in df.columns:
+            df["Longitude"] = pd.to_numeric(df["Longitude"], errors="coerce")
+
+        if "Latitude" in df.columns:
+            df["Latitude"] = pd.to_numeric(df["Latitude"], errors="coerce")
+
+        if "Distance (km)" in df.columns:
+            df["Distance (km)"] = pd.to_numeric(df["Distance (km)"], errors="coerce")
+
+        if "Durée (h)" in df.columns:
+            df["Durée (h)"] = pd.to_numeric(df["Durée (h)"], errors="coerce")
+
+        # Colonne booléenne
+        if "Afficher PDF" in df.columns:
+            df["Afficher PDF"] = df["Afficher PDF"].astype("bool")
+
+        # La colonne 'Chemin' reste en object (contient du JSON)
+
+    except Exception as e:
+        st.warning(f"Erreur lors de l'application des types de colonnes: {e}")
+
+    return df
+
+
 @st.cache_data
-def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None, branche="main"):
+def charger_donnees(nom_fichier="data/hebergements_chemins.csv", format=None, branche="main"):
     """
     Fonction pour charger des données depuis un dépôt GitHub privé.
 
@@ -38,7 +81,12 @@ def charger_donnees(nom_fichier="data/hebergements_chemins.parquet", format=None
             buffer = BytesIO(decoded_content)
 
             # Convertir selon le format demandé
-            if format == "parquet":
+            if format == "csv" or nom_fichier.endswith(".csv"):
+                df = pd.read_csv(buffer)
+                # Appliquer les bons types de colonnes
+                df = appliquer_types_colonnes(df)
+                return df
+            elif format == "parquet" or nom_fichier.endswith(".parquet"):
                 return pd.read_parquet(buffer)
             else:
                 buffer.seek(0)
@@ -80,7 +128,8 @@ def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des d
             elif nom_fichier.endswith(".csv"):
                 contenu.to_csv(buffer, index=False)
             else:
-                contenu.to_csv(buffer, index=False)  # CSV par défaut
+                # CSV par défaut (changement principal ici)
+                contenu.to_csv(buffer, index=False)
             buffer.seek(0)
             github_content = buffer.read()
 
@@ -114,21 +163,12 @@ def sauvegarder_donnees(contenu, nom_fichier, message_commit="Mise à jour des d
             contents = repo.get_contents(nom_fichier, ref=branche)
             # Mettre à jour le fichier existant
             repo.update_file(
-                path=contents.path,
-                message=message_commit,
-                content=github_content,
-                sha=contents.sha,
-                branch=branche,
+                path=contents.path, message=message_commit, content=github_content, sha=contents.sha, branch=branche
             )
         except GithubException as e:
             if e.status == 404:
                 # Si le fichier n'existe pas, le créer
-                repo.create_file(
-                    path=nom_fichier,
-                    message=message_commit,
-                    content=github_content,
-                    branch=branche,
-                )
+                repo.create_file(path=nom_fichier, message=message_commit, content=github_content, branch=branche)
             else:
                 raise e
 

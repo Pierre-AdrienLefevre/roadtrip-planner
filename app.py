@@ -194,7 +194,7 @@ def creer_editeur_donnees(df):
     # Traiter les changements de checkbox
     if "Lien" in df.columns and "Afficher PDF" in edited_df.columns:
         # Identifier les lignes avec checkbox cochée
-        pdf_checked_rows = edited_df[edited_df["Afficher PDF"] is True]
+        pdf_checked_rows = edited_df[edited_df["Afficher PDF"] == True]
 
         # Si une nouvelle checkbox est cochée
         if not pdf_checked_rows.empty:
@@ -238,6 +238,16 @@ def creer_editeur_donnees(df):
     return edited_df, df_visible, adresses_actuelles
 
 
+def valeurs_differentes(val1, val2):
+    """Compare deux valeurs en gérant les NA"""
+    if pd.isna(val1) and pd.isna(val2):
+        return False  # Deux NA sont considérés comme égaux
+    elif pd.isna(val1) or pd.isna(val2):
+        return True  # Un NA et une valeur sont différents
+    else:
+        return val1 != val2  # Comparaison normale
+
+
 def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploaded_file):
     """Traite les modifications apportées aux données et recalcule les distances si nécessaire"""
     # Vérifier si de nouvelles lignes ont été ajoutées
@@ -279,8 +289,8 @@ def traiter_modifications(edited_df, df_visible, df, adresses_actuelles, uploade
                 if col == "Afficher PDF":
                     continue
 
-                # Vérifier si la valeur a été modifiée
-                if edited_df.loc[idx, col] != df_visible.loc[idx, col]:
+                # Vérifier si la valeur a été modifiée (CORRECTION ICI)
+                if valeurs_differentes(edited_df.loc[idx, col], df_visible.loc[idx, col]):
                     modifications_detectees = True
 
                     # Mettre à jour la valeur dans le DataFrame complet
@@ -337,7 +347,7 @@ def main():
     configurer_page()
 
     # Charger le fichier parquet
-    uploaded_file = "data/hebergements_chemins.parquet"
+    uploaded_file = "data/hebergements_chemins.csv"
     df = charger_donnees(nom_fichier=uploaded_file, format="parquet")
 
     # Onglets pour différentes sections de l'application
